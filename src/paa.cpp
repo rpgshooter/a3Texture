@@ -198,7 +198,7 @@ void PAA::calculateMipmapsAndTaggs() {
         hasTransparency = true;
         Tagg taggFlag;
         taggFlag.signature = "GGATGALF";
-        taggFlag.data = {0x01, 0xFF, 0xFF, 0xFF};
+        taggFlag.data = {0x01, 0x00, 0x00, 0x00};  // Fixed: was 0xFF padding causing FLAGS corruption
         taggFlag.dataLength = 4;
         taggs.push_back(taggFlag);
     }
