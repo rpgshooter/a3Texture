@@ -157,8 +157,6 @@ public:
 
         // Stats section
         ImGui::Separator();
-        ImGui::TextDisabled("Native C++ with libsquish DXT compression");
-        ImGui::TextDisabled("50-100x faster than WASM");
 
         ImGui::End();
     }
