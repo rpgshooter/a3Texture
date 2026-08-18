@@ -16,6 +16,8 @@ find_package(glfw3 CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
 find_package(Stb REQUIRED)
 find_path(PORTABLE_FILE_DIALOGS_INCLUDE_DIRS "portable-file-dialogs.h")
+find_path(LZO_INCLUDE_DIR "lzo/lzo1x.h" REQUIRED)
+find_library(LZO_LIBRARY NAMES lzo2 REQUIRED)
 
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
@@ -40,9 +42,10 @@ add_executable(arma3-paa-cli ${SOURCES} ${HEADERS})
 target_link_libraries(arma3-paa-cli PRIVATE
     unofficial::libsquish::squish
     PNG::PNG
+    ${LZO_LIBRARY}
 )
 
-target_include_directories(arma3-paa-cli PRIVATE ${Stb_INCLUDE_DIR})
+target_include_directories(arma3-paa-cli PRIVATE ${Stb_INCLUDE_DIR} ${LZO_INCLUDE_DIR})
 
 #=============================================================================
 # GUI Application
@@ -58,6 +61,7 @@ add_executable(arma3-paa-gui ${GUI_SOURCES})
 target_link_libraries(arma3-paa-gui PRIVATE
     unofficial::libsquish::squish
     PNG::PNG
+    ${LZO_LIBRARY}
     imgui::imgui
     glfw
     glad::glad
@@ -66,6 +70,7 @@ target_link_libraries(arma3-paa-gui PRIVATE
 target_include_directories(arma3-paa-gui PRIVATE
     ${Stb_INCLUDE_DIR}
     ${PORTABLE_FILE_DIALOGS_INCLUDE_DIRS}
+    ${LZO_INCLUDE_DIR}
 )
 
 # Installation

@@ -1,5 +1,5 @@
-#include "paa.h"
-#include "image_loader.h"
+#include "../include/paa.h"
+#include "../include/image_loader.h"
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
