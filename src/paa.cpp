@@ -35,24 +35,6 @@ size_t dxtDataSize(PAAFormat format, uint32_t width, uint32_t height) {
 // BIS compresses mipmaps wider than 128px and stores the rest raw.
 constexpr uint32_t kLzoMinWidth = 128;
 
-// Verified against retail a3 textures; byte grammar is undocumented, so the
-// per-type sequences are reproduced literally rather than derived.
-const std::vector<uint8_t>* swizzleBytes(SwizzleType type) {
-    static const std::vector<uint8_t> nohq{0x05, 0x04, 0x02, 0x03};
-    static const std::vector<uint8_t> smdi{0x08, 0x08, 0x02, 0x03};
-    static const std::vector<uint8_t> as{0x08, 0x08, 0x02, 0x08};
-    static const std::vector<uint8_t> dt{0x08, 0x00, 0x00, 0x00};
-
-    switch (type) {
-        case SwizzleType::NOHQ: return &nohq;
-        case SwizzleType::SMDI: return &smdi;
-        case SwizzleType::AS:   return &as;
-        case SwizzleType::DT:   return &dt;
-        case SwizzleType::NONE: break;
-    }
-    return nullptr;
-}
-
 template <typename Fn>
 void parallelFor(size_t count, unsigned limit, Fn&& fn) {
     const size_t hw = limit ? limit : std::max(1u, std::thread::hardware_concurrency());
@@ -82,6 +64,38 @@ int squishFlags(PAAFormat format, Quality quality) {
         case Quality::High:   flags |= squish::kColourIterativeClusterFit; break;
     }
     return flags;
+}
+
+// Swizzle bytes select, per output channel in A,R,G,B order, which source
+// channel supplies it: 0-3 pass through A,R,G,B, 4-7 invert them, 8 is a
+// constant 1. Verified against retail a3 textures.
+enum class FlagPolicy { Auto, Never, Always };
+
+struct SwizzlePreset {
+    std::vector<uint8_t> bytes;
+    PAAFormat format;
+    FlagPolicy flag;
+};
+
+const SwizzlePreset* swizzlePreset(SwizzleType type) {
+    static const SwizzlePreset nohq{{0x05, 0x04, 0x02, 0x03}, PAAFormat::DXT5, FlagPolicy::Never};
+    static const SwizzlePreset smdi{{0x08, 0x08, 0x02, 0x03}, PAAFormat::DXT1, FlagPolicy::Never};
+    static const SwizzlePreset as{{0x08, 0x08, 0x02, 0x08}, PAAFormat::DXT1, FlagPolicy::Never};
+    static const SwizzlePreset dt{{0x08, 0x00, 0x00, 0x00}, PAAFormat::DXT1, FlagPolicy::Always};
+
+    switch (type) {
+        case SwizzleType::NOHQ: return &nohq;
+        case SwizzleType::SMDI: return &smdi;
+        case SwizzleType::AS:   return &as;
+        case SwizzleType::DT:   return &dt;
+        case SwizzleType::NONE: break;
+    }
+    return nullptr;
+}
+
+const std::vector<uint8_t>* swizzleBytes(SwizzleType type) {
+    const SwizzlePreset* preset = swizzlePreset(type);
+    return preset ? &preset->bytes : nullptr;
 }
 
 SwizzleType swizzleFromBytes(const std::vector<uint8_t>& data) {
@@ -277,15 +291,7 @@ void PAA::calculateMipmapsAndTaggs() {
     taggMax.dataLength = 4;
     taggs.push_back(taggMax);
 
-    // Transparency flag
-    if (averageAlpha != 255) {
-        hasTransparency = true;
-        Tagg taggFlag;
-        taggFlag.signature = "GGATGALF";
-        taggFlag.data = {0x01, 0x00, 0x00, 0x00};  // Fixed: was 0xFF padding causing FLAGS corruption
-        taggFlag.dataLength = 4;
-        taggs.push_back(taggFlag);
-    }
+    hasTransparency = (averageAlpha != 255);
 }
 
 SwizzleType PAA::swizzleFromFilename(const std::string& filename) {
@@ -318,23 +324,44 @@ void PAA::writePAA(const std::string& filename, PAAFormat targetFormat) {
         calculateMipmapsAndTaggs();
     }
 
-    // Determine format
-    if (targetFormat == PAAFormat::UNKNOWN) {
-        format = hasTransparency ? PAAFormat::DXT5 : PAAFormat::DXT1;
-    } else {
+    const SwizzlePreset* preset = swizzlePreset(swizzle);
+
+    // Determine format. A packed texture's format is fixed by its type, since
+    // alpha carries data rather than opacity.
+    if (targetFormat != PAAFormat::UNKNOWN) {
         format = targetFormat;
+    } else if (preset) {
+        format = preset->format;
+    } else {
+        format = hasTransparency ? PAAFormat::DXT5 : PAAFormat::DXT1;
     }
 
     taggs.erase(std::remove_if(taggs.begin(), taggs.end(),
-                               [](const Tagg& t) { return t.signature == "GGATZIWS"; }),
+                               [](const Tagg& t) {
+                                   return t.signature == "GGATZIWS" ||
+                                          t.signature == "GGATGALF";
+                               }),
                 taggs.end());
 
-    if (const auto* bytes = swizzleBytes(swizzle)) {
+    if (preset) {
         Tagg taggSwiz;
         taggSwiz.signature = "GGATZIWS";
-        taggSwiz.data = *bytes;
-        taggSwiz.dataLength = static_cast<uint32_t>(bytes->size());
+        taggSwiz.data = preset->bytes;
+        taggSwiz.dataLength = static_cast<uint32_t>(preset->bytes.size());
         taggs.push_back(taggSwiz);
+    }
+
+    bool writeTransparency = hasTransparency;
+    if (preset && preset->flag != FlagPolicy::Auto) {
+        writeTransparency = (preset->flag == FlagPolicy::Always);
+    }
+
+    if (writeTransparency) {
+        Tagg taggFlag;
+        taggFlag.signature = "GGATGALF";
+        taggFlag.data = {0x01, 0x00, 0x00, 0x00};
+        taggFlag.dataLength = 4;
+        taggs.push_back(taggFlag);
     }
 
     // Copy mipmaps for encoding
