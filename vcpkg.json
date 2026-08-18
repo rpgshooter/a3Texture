@@ -6,6 +6,7 @@
     "libsquish",
     "lzo",
     "libpng",
+    "tiff",
     "stb",
     {
       "name": "imgui",

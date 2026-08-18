@@ -20,6 +20,9 @@ public:
     // Load TGA file
     static ImageData loadTGA(const std::string& filename);
 
+    // Load TIFF file
+    static ImageData loadTIFF(const std::string& filename);
+
     // Auto-detect and load
     static ImageData load(const std::string& filename);
 
@@ -29,6 +32,7 @@ public:
 private:
     static bool isPNG(const std::string& filename);
     static bool isTGA(const std::string& filename);
+    static bool isTIFF(const std::string& filename);
 };
 
 } // namespace arma3
