@@ -11,6 +11,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(unofficial-libsquish CONFIG REQUIRED)
 find_package(PNG REQUIRED)
+find_package(TIFF REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
@@ -42,6 +43,7 @@ add_executable(arma3-paa-cli ${SOURCES} ${HEADERS})
 target_link_libraries(arma3-paa-cli PRIVATE
     unofficial::libsquish::squish
     PNG::PNG
+    TIFF::TIFF
     ${LZO_LIBRARY}
 )
 
@@ -61,6 +63,7 @@ add_executable(arma3-paa-gui ${GUI_SOURCES})
 target_link_libraries(arma3-paa-gui PRIVATE
     unofficial::libsquish::squish
     PNG::PNG
+    TIFF::TIFF
     ${LZO_LIBRARY}
     imgui::imgui
     glfw

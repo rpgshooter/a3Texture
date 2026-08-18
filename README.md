@@ -7,7 +7,7 @@ High-performance native C++ texture converter for Arma 3's PAA format.
 - **Native C++ Performance** - Uses libsquish for DXT1/DXT5 compression
 - **CLI Tool** - Batch conversion from command line
 - **GUI Application** - Dear ImGui interface with drag & drop support
-- **Format Support** - PNG, TGA, JPG input formats
+- **Format Support** - PNG, TGA, JPG, TIFF input formats
 - **Auto Mipmap Generation** - Generates all mipmap levels automatically
 - **DXT Compression** - DXT1 (no alpha) and DXT5 (with alpha)
 - **LZO Compression** - Automatic LZO compression for large mipmaps (>128px)
@@ -47,6 +47,7 @@ vcpkg will automatically install all dependencies:
 - libsquish (DXT compression)
 - LZO (additional compression)
 - stb (image loading)
+- libtiff (TIFF loading)
 - Dear ImGui + GLFW + GLAD (GUI)
 - Boost.GIL (image processing)
 
@@ -102,6 +103,7 @@ arma3-paa-cli --batch "*.png" --output-dir ./paa/
 - **libsquish** - DXT compression library
 - **LZO** - LZO1X compression
 - **stb_image** - PNG/TGA/JPG loading
+- **libtiff** - TIFF loading
 - **stb_image_write** - PNG writing
 - **Boost.GIL** - Image resampling for mipmaps
 - **Dear ImGui** - Immediate mode GUI
