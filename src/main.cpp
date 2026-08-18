@@ -6,6 +6,9 @@
 #include <vector>
 #include <filesystem>
 #include <chrono>
+#include <thread>
+#include <atomic>
+#include <mutex>
 
 namespace fs = std::filesystem;
 
@@ -16,6 +19,8 @@ void printUsage(const char* programName) {
     std::cout << "  " << programName << " <input> <output> [options]\n\n";
     std::cout << "Options:\n";
     std::cout << "  --format <DXT1|DXT5>    Compression format (default: auto-detect)\n";
+    std::cout << "  --quality <fast|normal|high>  Compression quality (default: normal)\n";
+    std::cout << "  --jobs <n>              Parallel jobs in batch mode (default: cores)\n";
     std::cout << "  --batch <pattern>       Batch convert files matching pattern\n";
     std::cout << "  --output-dir <dir>      Output directory for batch mode\n\n";
     std::cout << "Examples:\n";
@@ -32,6 +37,12 @@ std::string getOutputFilename(const std::string& input, const std::string& outpu
         return (fs::path(outputDir) / outputName).string();
     }
     return outputName;
+}
+
+arma3::Quality parseQuality(const std::string& value) {
+    if (value == "fast") return arma3::Quality::Fast;
+    if (value == "high") return arma3::Quality::High;
+    return arma3::Quality::Normal;
 }
 
 arma3::PAAFormat parseFormat(const std::string& formatStr) {
@@ -52,6 +63,8 @@ int main(int argc, char** argv) {
         std::string batchPattern;
         std::string outputDir;
         arma3::PAAFormat format = arma3::PAAFormat::UNKNOWN;
+        arma3::Quality quality = arma3::Quality::Normal;
+        unsigned jobs = 0;
         bool batchMode = false;
 
         // Parse arguments
@@ -67,6 +80,12 @@ int main(int argc, char** argv) {
             }
             else if (arg == "--output-dir" && i + 1 < argc) {
                 outputDir = argv[++i];
+            }
+            else if (arg == "--quality" && i + 1 < argc) {
+                quality = parseQuality(argv[++i]);
+            }
+            else if (arg == "--jobs" && i + 1 < argc) {
+                jobs = static_cast<unsigned>(std::stoul(argv[++i]));
             }
             else if (arg == "--help" || arg == "-h") {
                 printUsage(argv[0]);
@@ -101,35 +120,64 @@ int main(int argc, char** argv) {
 
             std::cout << "Found " << files.size() << " files\n";
 
-            int successCount = 0;
-            int failCount = 0;
+            std::atomic<int> successCount{0};
+            std::atomic<int> failCount{0};
+            std::atomic<size_t> nextFile{0};
+            std::mutex outputMutex;
 
-            for (const auto& file : files) {
-                try {
-                    auto start = std::chrono::high_resolution_clock::now();
+            unsigned workers = jobs ? jobs : std::thread::hardware_concurrency();
+            if (workers == 0) workers = 1;
+            workers = std::min<unsigned>(workers, static_cast<unsigned>(files.size()));
 
-                    arma3::PAA paa;
-                    paa.loadImage(file);
+            auto convert = [&] {
+                for (size_t i = nextFile++; i < files.size(); i = nextFile++) {
+                    const std::string& file = files[i];
+                    try {
+                        auto start = std::chrono::high_resolution_clock::now();
 
-                    std::string outFile = getOutputFilename(file, outputDir);
-                    paa.setSwizzle(arma3::PAA::swizzleFromFilename(outFile));
-                    paa.writePAA(outFile, format);
+                        arma3::PAA paa;
+                        paa.setQuality(quality);
+                        // Files already run in parallel, so keep each one serial.
+                        paa.setThreadCount(1);
+                        paa.loadImage(file);
 
-                    auto end = std::chrono::high_resolution_clock::now();
-                    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+                        std::string outFile = getOutputFilename(file, outputDir);
+                        paa.setSwizzle(arma3::PAA::swizzleFromFilename(outFile));
+                        paa.writePAA(outFile, format);
 
-                    std::cout << "✓ " << file << " → " << outFile
-                              << " (" << duration.count() << "ms)\n";
-                    successCount++;
+                        auto end = std::chrono::high_resolution_clock::now();
+                        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+                        std::lock_guard<std::mutex> lock(outputMutex);
+                        std::cout << "✓ " << file << " → " << outFile
+                                  << " (" << duration.count() << "ms)\n";
+                        successCount++;
+                    }
+                    catch (const std::exception& e) {
+                        std::lock_guard<std::mutex> lock(outputMutex);
+                        std::cerr << "✗ " << file << " - Error: " << e.what() << "\n";
+                        failCount++;
+                    }
                 }
-                catch (const std::exception& e) {
-                    std::cerr << "✗ " << file << " - Error: " << e.what() << "\n";
-                    failCount++;
-                }
+            };
+
+            auto batchStart = std::chrono::high_resolution_clock::now();
+
+            if (workers <= 1) {
+                convert();
+            } else {
+                std::vector<std::thread> threads;
+                threads.reserve(workers);
+                for (unsigned t = 0; t < workers; t++) threads.emplace_back(convert);
+                for (auto& thread : threads) thread.join();
             }
 
+            auto batchEnd = std::chrono::high_resolution_clock::now();
+            auto batchMs = std::chrono::duration_cast<std::chrono::milliseconds>(batchEnd - batchStart);
+
             std::cout << "\nBatch complete: " << successCount << " successful, "
-                      << failCount << " failed\n";
+                      << failCount << " failed in " << batchMs.count() << "ms"
+                      << " (" << workers << " jobs)\n";
         }
         else {
             // Single file conversion
@@ -144,6 +192,7 @@ int main(int argc, char** argv) {
             auto start = std::chrono::high_resolution_clock::now();
 
             arma3::PAA paa;
+            paa.setQuality(quality);
             paa.loadImage(input);
             paa.setSwizzle(arma3::PAA::swizzleFromFilename(output));
             paa.writePAA(output, format);

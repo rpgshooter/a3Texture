@@ -9,6 +9,8 @@
 #include <stdexcept>
 #include <algorithm>
 #include <mutex>
+#include <thread>
+#include <atomic>
 
 namespace arma3 {
 
@@ -49,6 +51,37 @@ const std::vector<uint8_t>* swizzleBytes(SwizzleType type) {
         case SwizzleType::NONE: break;
     }
     return nullptr;
+}
+
+template <typename Fn>
+void parallelFor(size_t count, unsigned limit, Fn&& fn) {
+    const size_t hw = limit ? limit : std::max(1u, std::thread::hardware_concurrency());
+    const size_t workers = std::min(hw, count);
+
+    if (workers <= 1) {
+        for (size_t i = 0; i < count; i++) fn(i);
+        return;
+    }
+
+    std::atomic<size_t> next{0};
+    std::vector<std::thread> threads;
+    threads.reserve(workers);
+    for (size_t t = 0; t < workers; t++) {
+        threads.emplace_back([&] {
+            for (size_t i = next++; i < count; i = next++) fn(i);
+        });
+    }
+    for (auto& thread : threads) thread.join();
+}
+
+int squishFlags(PAAFormat format, Quality quality) {
+    int flags = (format == PAAFormat::DXT1) ? squish::kDxt1 : squish::kDxt5;
+    switch (quality) {
+        case Quality::Fast:   flags |= squish::kColourRangeFit; break;
+        case Quality::Normal: flags |= squish::kColourClusterFit; break;
+        case Quality::High:   flags |= squish::kColourIterativeClusterFit; break;
+    }
+    return flags;
 }
 
 SwizzleType swizzleFromBytes(const std::vector<uint8_t>& data) {
@@ -308,15 +341,10 @@ void PAA::writePAA(const std::string& filename, PAAFormat targetFormat) {
     std::vector<MipMap> encodedMips = mipMaps;
 
     // Compress with DXT
-    if (format == PAAFormat::DXT5) {
-        magicNumber = 0xFF05;
+    if (format == PAAFormat::DXT5 || format == PAAFormat::DXT1) {
+        magicNumber = static_cast<uint16_t>(format);
         for (auto& mip : encodedMips) {
-            compressDXT5(mip);
-        }
-    } else if (format == PAAFormat::DXT1) {
-        magicNumber = 0xFF01;
-        for (auto& mip : encodedMips) {
-            compressDXT1(mip);
+            compressDXT(mip);
         }
     }
 
@@ -388,36 +416,36 @@ void PAA::writePAA(const std::string& filename, PAAFormat targetFormat) {
     ofs.close();
 }
 
-void PAA::compressDXT1(MipMap& mipmap) {
-    size_t compressedSize = mipmap.dataLength / 8;
-    std::vector<uint8_t> compressed(compressedSize);
+void PAA::compressDXT(MipMap& mipmap) {
+    const int flags = squishFlags(format, quality);
+    const size_t blockBytes = (format == PAAFormat::DXT1) ? 8 : 16;
+    const size_t width = mipmap.width;
+    const size_t height = mipmap.height;
+    const size_t blocksPerRow = (width + 3) / 4;
+    const size_t blockRows = (height + 3) / 4;
 
-    squish::CompressImage(
-        mipmap.data.data(),
-        mipmap.width,
-        mipmap.height,
-        compressed.data(),
-        squish::kDxt1
-    );
+    std::vector<uint8_t> compressed(blocksPerRow * blockRows * blockBytes);
 
-    mipmap.data = compressed;
-    mipmap.dataLength = compressedSize;
-}
+    // DXT blocks are independent, so bands of 4 rows compress in parallel.
+    const size_t rowsPerBand = std::max<size_t>(1, blockRows / 64);
+    const size_t bands = (blockRows + rowsPerBand - 1) / rowsPerBand;
 
-void PAA::compressDXT5(MipMap& mipmap) {
-    size_t compressedSize = mipmap.dataLength / 4;
-    std::vector<uint8_t> compressed(compressedSize);
+    parallelFor(bands, threadCount, [&](size_t band) {
+        const size_t firstBlockRow = band * rowsPerBand;
+        const size_t y = firstBlockRow * 4;
+        const size_t bandHeight = std::min(rowsPerBand * 4, height - y);
 
-    squish::CompressImage(
-        mipmap.data.data(),
-        mipmap.width,
-        mipmap.height,
-        compressed.data(),
-        squish::kDxt5
-    );
+        squish::CompressImage(
+            mipmap.data.data() + y * width * 4,
+            static_cast<int>(width),
+            static_cast<int>(bandHeight),
+            compressed.data() + firstBlockRow * blocksPerRow * blockBytes,
+            flags
+        );
+    });
 
-    mipmap.data = compressed;
-    mipmap.dataLength = compressedSize;
+    mipmap.dataLength = static_cast<uint32_t>(compressed.size());
+    mipmap.data = std::move(compressed);
 }
 
 void PAA::decompressDXT1(MipMap& mipmap) {
@@ -456,12 +484,12 @@ void PAA::compressLZO(MipMap& mipmap) {
     ensureLzoInit();
 
     const size_t srcLen = mipmap.data.size();
-    std::vector<uint8_t> work(LZO1X_1_MEM_COMPRESS);
+    std::vector<uint8_t> work(LZO1X_999_MEM_COMPRESS);
     std::vector<uint8_t> compressed(srcLen + srcLen / 16 + 64 + 3);
 
     lzo_uint compressedLen = compressed.size();
-    if (lzo1x_1_compress(mipmap.data.data(), srcLen,
-                         compressed.data(), &compressedLen, work.data()) != LZO_E_OK) {
+    if (lzo1x_999_compress(mipmap.data.data(), srcLen,
+                           compressed.data(), &compressedLen, work.data()) != LZO_E_OK) {
         throw std::runtime_error("LZO compression failed");
     }
 
