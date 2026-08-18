@@ -3,9 +3,7 @@
   "version": "1.0.0",
   "description": "Native C++ PAA converter for Arma 3 textures",
   "dependencies": [
-    "boost-gil",
     "libsquish",
-    "lzo",
     "libpng",
     "stb",
     {

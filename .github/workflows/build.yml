@@ -8,62 +8,70 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+
+    runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v4
-
-    - name: Setup vcpkg
-      uses: lukka/run-vcpkg@v11
       with:
-        vcpkgGitCommitId: '271a5b8850aa50f9a40269cbf3cf414b36e333d6'
+        submodules: recursive
 
-    - name: Configure CMake
+    - name: Install Linux build dependencies
+      if: runner.os == 'Linux'
       run: |
-        cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake" -DCMAKE_BUILD_TYPE=Release
+        sudo apt-get update
+        sudo apt-get install -y ninja-build pkg-config \
+          libx11-dev libxft-dev libxext-dev libwayland-dev libxkbcommon-dev \
+          libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
+
+    - name: Setup Ninja
+      if: runner.os == 'Windows'
+      uses: seanmiddleditch/gha-setup-ninja@v4
+
+    - name: Setup MSVC environment
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Bootstrap vcpkg (Linux)
+      if: runner.os == 'Linux'
+      run: ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
+
+    - name: Bootstrap vcpkg (Windows)
+      if: runner.os == 'Windows'
+      run: .\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+
+    - name: Configure
+      run: cmake --preset release
 
     - name: Build
-      run: cmake --build build --config Release
+      run: cmake --build --preset release
 
     - name: Upload CLI artifact
       uses: actions/upload-artifact@v4
       with:
-        name: arma3-paa-cli-windows
-        path: build/Release/arma3-paa-cli.exe
+        name: arma3-paa-cli-${{ runner.os }}
+        path: |
+          build/release/arma3-paa-cli
+          build/release/arma3-paa-cli.exe
+        if-no-files-found: ignore
 
     - name: Upload GUI artifact
       uses: actions/upload-artifact@v4
       with:
-        name: arma3-paa-gui-windows
-        path: build/Release/arma3-paa-gui.exe
-
-  build-linux:
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libboost-dev libsquish-dev libpng-dev libglfw3-dev libstb-dev
-
-    - name: Configure CMake
-      run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=OFF
-
-    - name: Build
-      run: cmake --build build --config Release
-
-    - name: Upload CLI artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: arma3-paa-cli-linux
-        path: build/arma3-paa-cli
+        name: arma3-paa-gui-${{ runner.os }}
+        path: |
+          build/release/arma3-paa-gui
+          build/release/arma3-paa-gui.exe
+        if-no-files-found: ignore
 
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [build-windows, build-linux]
+    needs: [build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -72,20 +80,26 @@ jobs:
     - name: Download Windows CLI
       uses: actions/download-artifact@v4
       with:
-        name: arma3-paa-cli-windows
+        name: arma3-paa-cli-Windows
         path: windows-cli
 
     - name: Download Windows GUI
       uses: actions/download-artifact@v4
       with:
-        name: arma3-paa-gui-windows
+        name: arma3-paa-gui-Windows
         path: windows-gui
 
     - name: Download Linux CLI
       uses: actions/download-artifact@v4
       with:
-        name: arma3-paa-cli-linux
+        name: arma3-paa-cli-Linux
         path: linux-cli
+
+    - name: Download Linux GUI
+      uses: actions/download-artifact@v4
+      with:
+        name: arma3-paa-gui-Linux
+        path: linux-gui
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
@@ -98,3 +112,4 @@ jobs:
           windows-cli/arma3-paa-cli.exe
           windows-gui/arma3-paa-gui.exe
           linux-cli/arma3-paa-cli
+          linux-gui/arma3-paa-gui
