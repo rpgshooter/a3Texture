@@ -1,17 +1,67 @@
-#include "paa.h"
-#include "utils.h"
-#include "image_loader.h"
+#include "../include/paa.h"
+#include "../include/utils.h"
+#include "../include/image_loader.h"
 
 #include <squish.h>
-//#include <lzo/lzo1x.h>  // LZO disabled for now
+#include <lzo/lzo1x.h>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
 #include <algorithm>
+#include <mutex>
 
 namespace arma3 {
 
 using namespace utils;
+
+namespace {
+
+void ensureLzoInit() {
+    static std::once_flag flag;
+    static int result = LZO_E_OK;
+    std::call_once(flag, [] { result = lzo_init(); });
+    if (result != LZO_E_OK) {
+        throw std::runtime_error("LZO initialization failed");
+    }
+}
+
+size_t dxtDataSize(PAAFormat format, uint32_t width, uint32_t height) {
+    const size_t blocks = size_t((width + 3) / 4) * ((height + 3) / 4);
+    return blocks * (format == PAAFormat::DXT1 ? 8 : 16);
+}
+
+// BIS compresses mipmaps wider than 128px and stores the rest raw.
+constexpr uint32_t kLzoMinWidth = 128;
+
+// Verified against retail a3 textures; byte grammar is undocumented, so the
+// per-type sequences are reproduced literally rather than derived.
+const std::vector<uint8_t>* swizzleBytes(SwizzleType type) {
+    static const std::vector<uint8_t> nohq{0x05, 0x04, 0x02, 0x03};
+    static const std::vector<uint8_t> smdi{0x08, 0x08, 0x02, 0x03};
+    static const std::vector<uint8_t> as{0x08, 0x08, 0x02, 0x08};
+    static const std::vector<uint8_t> dt{0x08, 0x00, 0x00, 0x00};
+
+    switch (type) {
+        case SwizzleType::NOHQ: return &nohq;
+        case SwizzleType::SMDI: return &smdi;
+        case SwizzleType::AS:   return &as;
+        case SwizzleType::DT:   return &dt;
+        case SwizzleType::NONE: break;
+    }
+    return nullptr;
+}
+
+SwizzleType swizzleFromBytes(const std::vector<uint8_t>& data) {
+    for (auto type : {SwizzleType::NOHQ, SwizzleType::SMDI, SwizzleType::AS, SwizzleType::DT}) {
+        const auto* bytes = swizzleBytes(type);
+        if (bytes && *bytes == data) {
+            return type;
+        }
+    }
+    return SwizzleType::NONE;
+}
+
+}
 
 PAA::PAA() : format(PAAFormat::DXT5), magicNumber(0xFF05) {}
 
@@ -59,6 +109,8 @@ void PAA::readPAA() {
 
         if (tagg.signature == "GGATGALF") {
             hasTransparency = true;
+        } else if (tagg.signature == "GGATZIWS") {
+            swizzle = swizzleFromBytes(tagg.data);
         }
     }
 
@@ -76,7 +128,6 @@ void PAA::readPAA() {
         mipmap.dataLength = readBytesAsArmaUShort(stream);
         mipmap.data = readBytes<uint8_t>(stream, mipmap.dataLength);
 
-        // Check for LZO compression flag
         if ((mipmap.width & 0x8000) != 0) {
             mipmap.width &= 0x7FFF;
             mipmap.lzoCompressed = true;
@@ -178,9 +229,9 @@ void PAA::calculateMipmapsAndTaggs() {
     Tagg taggAvg;
     taggAvg.signature = "GGATCGVA";
     taggAvg.data = {
-        static_cast<uint8_t>(averageRed),
-        static_cast<uint8_t>(averageGreen),
         static_cast<uint8_t>(averageBlue),
+        static_cast<uint8_t>(averageGreen),
+        static_cast<uint8_t>(averageRed),
         static_cast<uint8_t>(averageAlpha)
     };
     taggAvg.dataLength = 4;
@@ -204,6 +255,31 @@ void PAA::calculateMipmapsAndTaggs() {
     }
 }
 
+SwizzleType PAA::swizzleFromFilename(const std::string& filename) {
+    std::string stem = filename;
+    const size_t slash = stem.find_last_of("/\\");
+    if (slash != std::string::npos) stem = stem.substr(slash + 1);
+    const size_t dot = stem.find_last_of('.');
+    if (dot != std::string::npos) stem = stem.substr(0, dot);
+    std::transform(stem.begin(), stem.end(), stem.begin(), ::tolower);
+
+    const std::pair<const char*, SwizzleType> suffixes[] = {
+        {"_nohq", SwizzleType::NOHQ},
+        {"_smdi", SwizzleType::SMDI},
+        {"_as",   SwizzleType::AS},
+        {"_dt",   SwizzleType::DT}
+    };
+
+    for (const auto& entry : suffixes) {
+        const std::string suffix = entry.first;
+        if (stem.size() >= suffix.size() &&
+            stem.compare(stem.size() - suffix.size(), suffix.size(), suffix) == 0) {
+            return entry.second;
+        }
+    }
+    return SwizzleType::NONE;
+}
+
 void PAA::writePAA(const std::string& filename, PAAFormat targetFormat) {
     if (mipMaps.size() <= 1) {
         calculateMipmapsAndTaggs();
@@ -214,6 +290,18 @@ void PAA::writePAA(const std::string& filename, PAAFormat targetFormat) {
         format = hasTransparency ? PAAFormat::DXT5 : PAAFormat::DXT1;
     } else {
         format = targetFormat;
+    }
+
+    taggs.erase(std::remove_if(taggs.begin(), taggs.end(),
+                               [](const Tagg& t) { return t.signature == "GGATZIWS"; }),
+                taggs.end());
+
+    if (const auto* bytes = swizzleBytes(swizzle)) {
+        Tagg taggSwiz;
+        taggSwiz.signature = "GGATZIWS";
+        taggSwiz.data = *bytes;
+        taggSwiz.dataLength = static_cast<uint32_t>(bytes->size());
+        taggs.push_back(taggSwiz);
     }
 
     // Copy mipmaps for encoding
@@ -232,16 +320,11 @@ void PAA::writePAA(const std::string& filename, PAAFormat targetFormat) {
         }
     }
 
-    // Apply LZO compression to large mipmaps (DISABLED - LZO not linked)
-    /*if (encodedMips[0].width > 128) {
-        if (lzo_init() != LZO_E_OK) {
-            throw std::runtime_error("LZO initialization failed");
+    for (auto& mip : encodedMips) {
+        if (mip.width > kLzoMinWidth) {
+            compressLZO(mip);
         }
-
-        for (size_t i = 0; i < encodedMips.size() && encodedMips[i].width > 128; i++) {
-            compressLZO(encodedMips[i]);
-        }
-    }*/
+    }
 
     // Calculate offsets tag
     Tagg taggOffs;
@@ -370,13 +453,44 @@ void PAA::decompressDXT5(MipMap& mipmap) {
 }
 
 void PAA::compressLZO(MipMap& mipmap) {
-    // LZO DISABLED - not linked
-    throw std::runtime_error("LZO compression not available in this build");
+    ensureLzoInit();
+
+    const size_t srcLen = mipmap.data.size();
+    std::vector<uint8_t> work(LZO1X_1_MEM_COMPRESS);
+    std::vector<uint8_t> compressed(srcLen + srcLen / 16 + 64 + 3);
+
+    lzo_uint compressedLen = compressed.size();
+    if (lzo1x_1_compress(mipmap.data.data(), srcLen,
+                         compressed.data(), &compressedLen, work.data()) != LZO_E_OK) {
+        throw std::runtime_error("LZO compression failed");
+    }
+
+    if (compressedLen >= srcLen) {
+        return;
+    }
+
+    compressed.resize(compressedLen);
+    mipmap.data = std::move(compressed);
+    mipmap.dataLength = compressedLen;
+    mipmap.lzoCompressed = true;
 }
 
 void PAA::decompressLZO(MipMap& mipmap) {
-    // LZO DISABLED - not linked
-    throw std::runtime_error("LZO decompression not available in this build");
+    ensureLzoInit();
+
+    const size_t expected = dxtDataSize(format, mipmap.width, mipmap.height);
+    std::vector<uint8_t> decompressed(expected);
+
+    lzo_uint decompressedLen = expected;
+    if (lzo1x_decompress_safe(mipmap.data.data(), mipmap.data.size(),
+                              decompressed.data(), &decompressedLen, nullptr) != LZO_E_OK) {
+        throw std::runtime_error("LZO decompression failed");
+    }
+
+    decompressed.resize(decompressedLen);
+    mipmap.data = std::move(decompressed);
+    mipmap.dataLength = decompressedLen;
+    mipmap.lzoCompressed = false;
 }
 
 std::vector<uint8_t> PAA::getRawPixelData(uint8_t level) {

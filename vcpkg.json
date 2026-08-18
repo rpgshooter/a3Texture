@@ -4,6 +4,7 @@
   "description": "Native C++ PAA converter for Arma 3 textures",
   "dependencies": [
     "libsquish",
+    "lzo",
     "libpng",
     "stb",
     {

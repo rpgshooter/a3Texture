@@ -7,6 +7,14 @@
 
 namespace arma3 {
 
+enum class SwizzleType {
+    NONE,
+    NOHQ,
+    SMDI,
+    AS,
+    DT
+};
+
 enum class PAAFormat {
     UNKNOWN = 0,
     DXT1 = 0xFF01,
@@ -54,6 +62,11 @@ public:
     // Write PAA file
     void writePAA(const std::string& filename, PAAFormat format = PAAFormat::UNKNOWN);
 
+    // Channel swizzle, written as the SWIZ tagg. Arma infers texture type from it.
+    void setSwizzle(SwizzleType type) { swizzle = type; }
+    SwizzleType getSwizzle() const { return swizzle; }
+    static SwizzleType swizzleFromFilename(const std::string& filename);
+
     // Write image file (PNG)
     void writeImage(const std::string& filename, int mipLevel = 0);
 
@@ -80,6 +93,7 @@ private:
     PAAFormat format = PAAFormat::DXT5;
     uint16_t magicNumber = 0xFF05;
     bool hasTransparency = false;
+    SwizzleType swizzle = SwizzleType::NONE;
 
     std::vector<MipMap> mipMaps;
     std::vector<Tagg> taggs;

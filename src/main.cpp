@@ -1,5 +1,5 @@
-#include "paa.h"
-#include "image_loader.h"
+#include "../include/paa.h"
+#include "../include/image_loader.h"
 
 #include <iostream>
 #include <string>
@@ -112,6 +112,7 @@ int main(int argc, char** argv) {
                     paa.loadImage(file);
 
                     std::string outFile = getOutputFilename(file, outputDir);
+                    paa.setSwizzle(arma3::PAA::swizzleFromFilename(outFile));
                     paa.writePAA(outFile, format);
 
                     auto end = std::chrono::high_resolution_clock::now();
@@ -144,6 +145,7 @@ int main(int argc, char** argv) {
 
             arma3::PAA paa;
             paa.loadImage(input);
+            paa.setSwizzle(arma3::PAA::swizzleFromFilename(output));
             paa.writePAA(output, format);
 
             auto end = std::chrono::high_resolution_clock::now();
