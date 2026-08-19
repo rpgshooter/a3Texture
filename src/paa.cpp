@@ -216,8 +216,10 @@ void PAA::readPAA() {
 }
 
 void PAA::loadImage(const std::string& filename) {
-    ImageData img = ImageLoader::load(filename);
+    setImage(ImageLoader::load(filename));
+}
 
+void PAA::setImage(const ImageData& img) {
     mipMaps.clear();
 
     MipMap mipmap;

@@ -1,5 +1,6 @@
 #include "../include/paa.h"
 #include "../include/image_loader.h"
+#include "../include/channel_packer.h"
 
 #include <iostream>
 #include <string>
@@ -21,12 +22,142 @@ void printUsage(const char* programName) {
     std::cout << "  --format <DXT1|DXT5>    Compression format (default: auto-detect)\n";
     std::cout << "  --quality <fast|normal|high>  Compression quality (default: normal)\n";
     std::cout << "  --jobs <n>              Parallel jobs in batch mode (default: cores)\n";
+    std::cout << "\nChannel packing:\n";
+    std::cout << "  " << programName << " pack --preset <name> --source <spec> ... <output.paa>\n";
+    std::cout << "  --preset <name>         One of: ";
+    {
+        auto names = arma3::ChannelPacker::presetNames();
+        for (size_t i = 0; i < names.size(); i++) {
+            std::cout << (i ? ", " : "") << names[i];
+        }
+        std::cout << "\n";
+    }
+    std::cout << "  --source <file[:c][~]>  Source image; :c picks a channel, ~ inverts\n";
+    std::cout << "  --resolution <WxH>      Override the majority source resolution\n";
     std::cout << "  --batch <pattern>       Batch convert files matching pattern\n";
     std::cout << "  --output-dir <dir>      Output directory for batch mode\n\n";
     std::cout << "Examples:\n";
     std::cout << "  " << programName << " texture.png texture.paa\n";
     std::cout << "  " << programName << " texture.png texture.paa --format DXT5\n";
     std::cout << "  " << programName << " --batch \"*.png\" --output-dir ./paa/\n";
+    std::cout << "  " << programName << " pack --preset smdi --source spec.tif"
+              << " --source gloss.tif~ hull_smdi.paa\n";
+}
+
+arma3::Quality parseQuality(const std::string& value) {
+    if (value == "fast") return arma3::Quality::Fast;
+    if (value == "high") return arma3::Quality::High;
+    return arma3::Quality::Normal;
+}
+
+int runPack(int argc, char** argv) {
+    const arma3::PackPreset* preset = nullptr;
+    std::vector<std::string> sourceSpecs;
+    std::string output;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    arma3::Quality quality = arma3::Quality::Normal;
+
+    for (int i = 2; i < argc; i++) {
+        std::string arg = argv[i];
+
+        if (arg == "--preset" && i + 1 < argc) {
+            const std::string name = argv[++i];
+            preset = arma3::ChannelPacker::findPreset(name);
+            if (!preset) {
+                std::cerr << "Unknown preset: " << name << "\n";
+                return 1;
+            }
+        }
+        else if (arg == "--source" && i + 1 < argc) {
+            sourceSpecs.push_back(argv[++i]);
+        }
+        else if (arg == "--resolution" && i + 1 < argc) {
+            std::string value = argv[++i];
+            const size_t x = value.find_first_of("xX");
+            if (x == std::string::npos) {
+                std::cerr << "Expected --resolution WxH\n";
+                return 1;
+            }
+            width = static_cast<uint32_t>(std::stoul(value.substr(0, x)));
+            height = static_cast<uint32_t>(std::stoul(value.substr(x + 1)));
+        }
+        else if (arg == "--quality" && i + 1 < argc) {
+            quality = parseQuality(argv[++i]);
+        }
+        else if (output.empty()) {
+            output = arg;
+        }
+    }
+
+    if (!preset) {
+        std::cerr << "pack requires --preset\n";
+        return 1;
+    }
+    if (output.empty()) {
+        std::cerr << "pack requires an output file\n";
+        return 1;
+    }
+    if (int(sourceSpecs.size()) != preset->sourceCount) {
+        std::cerr << "Preset " << preset->name << " needs " << preset->sourceCount
+                  << " source(s), got " << sourceSpecs.size() << "\n";
+        for (int i = 0; i < preset->sourceCount; i++) {
+            std::cerr << "  " << (i + 1) << ". " << preset->sourceLabels[i] << "\n";
+        }
+        return 1;
+    }
+
+    arma3::ChannelPacker packer(*preset);
+
+    for (size_t i = 0; i < sourceSpecs.size(); i++) {
+        std::string spec = sourceSpecs[i];
+
+        bool invert = false;
+        if (!spec.empty() && spec.back() == '~') {
+            invert = true;
+            spec.pop_back();
+        }
+
+        arma3::PackChannel channel = arma3::PackChannel::R;
+        const size_t colon = spec.find_last_of(':');
+        if (colon != std::string::npos && colon + 2 == spec.size()) {
+            switch (spec[colon + 1]) {
+                case 'r': channel = arma3::PackChannel::R; break;
+                case 'g': channel = arma3::PackChannel::G; break;
+                case 'b': channel = arma3::PackChannel::B; break;
+                case 'a': channel = arma3::PackChannel::A; break;
+                default:
+                    std::cerr << "Unknown channel in: " << sourceSpecs[i] << "\n";
+                    return 1;
+            }
+            spec = spec.substr(0, colon);
+        }
+
+        packer.setSource(static_cast<int>(i), arma3::ImageLoader::load(spec));
+        packer.setSourceChannel(static_cast<int>(i), channel);
+        packer.setSourceInvert(static_cast<int>(i), invert);
+
+        std::cout << "  " << preset->sourceLabels[i] << ": " << spec
+                  << (invert ? " (inverted)" : "") << "\n";
+    }
+
+    if (width && height) {
+        packer.setTargetSize(width, height);
+    }
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+    arma3::PAA paa;
+    paa.setQuality(quality);
+    paa.setImage(packer.pack());
+    paa.setSwizzle(packer.getSwizzle());
+    paa.writePAA(output);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    std::cout << "\u2713 Packed " << output << " (" << ms.count() << "ms)\n";
+    return 0;
 }
 
 std::string getOutputFilename(const std::string& input, const std::string& outputDir = "") {
@@ -39,12 +170,6 @@ std::string getOutputFilename(const std::string& input, const std::string& outpu
     return outputName;
 }
 
-arma3::Quality parseQuality(const std::string& value) {
-    if (value == "fast") return arma3::Quality::Fast;
-    if (value == "high") return arma3::Quality::High;
-    return arma3::Quality::Normal;
-}
-
 arma3::PAAFormat parseFormat(const std::string& formatStr) {
     if (formatStr == "DXT1") return arma3::PAAFormat::DXT1;
     if (formatStr == "DXT5") return arma3::PAAFormat::DXT5;
@@ -55,6 +180,16 @@ int main(int argc, char** argv) {
     if (argc < 2) {
         printUsage(argv[0]);
         return 1;
+    }
+
+    if (std::string(argv[1]) == "pack") {
+        try {
+            return runPack(argc, argv);
+        }
+        catch (const std::exception& e) {
+            std::cerr << "Error: " << e.what() << "\n";
+            return 1;
+        }
     }
 
     try {
