@@ -13,7 +13,10 @@
       "name": "imgui",
       "features": ["opengl3-binding", "glfw-binding"]
     },
-    "glfw3",
+    {
+      "name": "glfw3",
+      "features": ["wayland"]
+    },
     "glad",
     "portable-file-dialogs"
   ],
