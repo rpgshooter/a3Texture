@@ -30,6 +30,7 @@ set(SOURCES
     src/image_loader.cpp
     src/channel_packer.cpp
     src/texture_role.cpp
+    src/job_runner.cpp
 )
 
 set(HEADERS
@@ -37,6 +38,7 @@ set(HEADERS
     include/image_loader.h
     include/channel_packer.h
     include/texture_role.h
+    include/job_runner.h
     include/utils.h
 )
 
@@ -64,6 +66,7 @@ set(GUI_SOURCES
     src/image_loader.cpp
     src/channel_packer.cpp
     src/texture_role.cpp
+    src/job_runner.cpp
 )
 
 add_executable(arma3-paa-gui ${GUI_SOURCES})
