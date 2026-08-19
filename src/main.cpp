@@ -10,6 +10,7 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <map>
 
 namespace fs = std::filesystem;
 
@@ -34,6 +35,8 @@ void printUsage(const char* programName) {
     }
     std::cout << "  --source <file[:c][~]>  Source image; :c picks a channel, ~ inverts\n";
     std::cout << "  --resolution <WxH>      Override the majority source resolution\n";
+    std::cout << "  --r/--g/--b/--a <spec>  Free-form slot; =N for a constant\n";
+    std::cout << "  --no-swizzle            Input is already packed; tag only\n";
     std::cout << "  --batch <pattern>       Batch convert files matching pattern\n";
     std::cout << "  --output-dir <dir>      Output directory for batch mode\n\n";
     std::cout << "Examples:\n";
@@ -50,12 +53,55 @@ arma3::Quality parseQuality(const std::string& value) {
     return arma3::Quality::Normal;
 }
 
+struct SlotSpec {
+    bool set = false;
+    bool constant = false;
+    uint8_t value = 0;
+    std::string file;
+    arma3::PackChannel channel = arma3::PackChannel::R;
+    bool invert = false;
+};
+
+// file[:c][~] or =N
+bool parseSlotSpec(const std::string& text, SlotSpec& out) {
+    out.set = true;
+
+    if (!text.empty() && text[0] == '=') {
+        out.constant = true;
+        out.value = static_cast<uint8_t>(std::stoul(text.substr(1)));
+        return true;
+    }
+
+    std::string spec = text;
+    if (!spec.empty() && spec.back() == '~') {
+        out.invert = true;
+        spec.pop_back();
+    }
+
+    const size_t colon = spec.find_last_of(':');
+    if (colon != std::string::npos && colon + 2 == spec.size()) {
+        switch (spec[colon + 1]) {
+            case 'r': out.channel = arma3::PackChannel::R; break;
+            case 'g': out.channel = arma3::PackChannel::G; break;
+            case 'b': out.channel = arma3::PackChannel::B; break;
+            case 'a': out.channel = arma3::PackChannel::A; break;
+            default: return false;
+        }
+        spec = spec.substr(0, colon);
+    }
+
+    out.file = spec;
+    return !spec.empty();
+}
+
 int runPack(int argc, char** argv) {
     const arma3::PackPreset* preset = nullptr;
     std::vector<std::string> sourceSpecs;
+    SlotSpec slots[4];
     std::string output;
     uint32_t width = 0;
     uint32_t height = 0;
+    bool applySwizzle = true;
     arma3::Quality quality = arma3::Quality::Normal;
 
     for (int i = 2; i < argc; i++) {
@@ -85,19 +131,87 @@ int runPack(int argc, char** argv) {
         else if (arg == "--quality" && i + 1 < argc) {
             quality = parseQuality(argv[++i]);
         }
+        else if (arg == "--no-swizzle") {
+            applySwizzle = false;
+        }
+        else if ((arg == "--r" || arg == "--g" || arg == "--b" || arg == "--a") &&
+                 i + 1 < argc) {
+            const int index = (arg == "--r") ? 0 : (arg == "--g") ? 1 : (arg == "--b") ? 2 : 3;
+            if (!parseSlotSpec(argv[++i], slots[index])) {
+                std::cerr << "Could not parse " << arg << " " << argv[i] << "\n";
+                return 1;
+            }
+        }
         else if (output.empty()) {
             output = arg;
         }
     }
 
-    if (!preset) {
-        std::cerr << "pack requires --preset\n";
-        return 1;
+    const bool freeForm = !preset;
+    if (freeForm) {
+        bool any = false;
+        for (const auto& slot : slots) any = any || slot.set;
+        if (!any) {
+            std::cerr << "pack requires --preset, or free-form --r/--g/--b/--a slots\n";
+            return 1;
+        }
     }
     if (output.empty()) {
         std::cerr << "pack requires an output file\n";
         return 1;
     }
+    if (freeForm) {
+        arma3::ChannelPacker packer;
+        std::map<std::string, int> loaded;
+
+        for (int c = 0; c < 4; c++) {
+            const SlotSpec& spec = slots[c];
+            const auto channel = static_cast<arma3::PackChannel>(c);
+
+            if (!spec.set) {
+                packer.setSlot(channel, arma3::ChannelMapping{-1, arma3::PackChannel::R,
+                                                              uint8_t(c == 3 ? 255 : 0), false});
+                continue;
+            }
+
+            if (spec.constant) {
+                packer.setSlot(channel, arma3::ChannelMapping{-1, arma3::PackChannel::R,
+                                                              spec.value, spec.invert});
+                continue;
+            }
+
+            auto it = loaded.find(spec.file);
+            if (it == loaded.end()) {
+                it = loaded.emplace(spec.file,
+                                    packer.addSource(arma3::ImageLoader::load(spec.file))).first;
+            }
+            packer.setSlot(channel, arma3::ChannelMapping{it->second, spec.channel,
+                                                          0, spec.invert});
+        }
+
+        if (width && height) {
+            packer.setTargetSize(width, height);
+        }
+
+        const arma3::SwizzleType swizzle = arma3::PAA::swizzleFromFilename(output);
+
+        auto start = std::chrono::high_resolution_clock::now();
+
+        arma3::PAA paa;
+        paa.setQuality(quality);
+        paa.setImage(packer.pack());
+        paa.setSwizzle(swizzle);
+        if (!applySwizzle) {
+            paa.setSwizzleMode(arma3::SwizzleMode::TagOnly);
+        }
+        paa.writePAA(output);
+
+        auto end = std::chrono::high_resolution_clock::now();
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+        std::cout << "\u2713 Packed " << output << " (" << ms.count() << "ms)\n";
+        return 0;
+    }
+
     if (int(sourceSpecs.size()) != preset->sourceCount) {
         std::cerr << "Preset " << preset->name << " needs " << preset->sourceCount
                   << " source(s), got " << sourceSpecs.size() << "\n";
@@ -151,6 +265,9 @@ int runPack(int argc, char** argv) {
     paa.setQuality(quality);
     paa.setImage(packer.pack());
     paa.setSwizzle(packer.getSwizzle());
+    if (!applySwizzle) {
+        paa.setSwizzleMode(arma3::SwizzleMode::TagOnly);
+    }
     paa.writePAA(output);
 
     auto end = std::chrono::high_resolution_clock::now();
