@@ -90,6 +90,8 @@ public:
     void setSwizzle(SwizzleType type) { swizzle = type; }
     SwizzleType getSwizzle() const { return swizzle; }
     static SwizzleType swizzleFromFilename(const std::string& filename);
+    static const char* swizzleName(SwizzleType type);
+    static PAAFormat swizzleFormat(SwizzleType type);   // UNKNOWN means auto
 
     void setSwizzleMode(SwizzleMode mode) { swizzleMode = mode; }
     SwizzleMode getSwizzleMode() const { return swizzleMode; }
@@ -99,6 +101,9 @@ public:
 
     // Get pixel data
     std::vector<uint8_t> getRawPixelData(uint8_t level = 0);
+
+    // Pixels as they will be stored, with the swizzle applied
+    std::vector<uint8_t> getPackedPixelData(uint8_t level = 0) const;
 
     // Set pixel data
     void setRawPixelData(const std::vector<uint8_t>& data, uint8_t level = 0);
@@ -110,6 +115,7 @@ public:
 
 private:
     void calculateMipmapsAndTaggs();
+    std::vector<uint8_t> swizzleTransformBytes() const;
     void compressDXT(MipMap& mipmap);
     void decompressDXT1(MipMap& mipmap);
     void decompressDXT5(MipMap& mipmap);
