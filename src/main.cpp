@@ -3,6 +3,7 @@
 #include "../include/channel_packer.h"
 #include "../include/texture_role.h"
 #include "../include/job_runner.h"
+#include "../include/p3d_reader.h"
 
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -55,6 +56,8 @@ void printUsage(const char* programName) {
     std::cout << "\nWhole material:\n";
     std::cout << "  " << programName << " plan <files...>            Show what would be produced\n";
     std::cout << "  " << programName << " auto <files...> [--output-dir <dir>]\n";
+    std::cout << "\nModels:\n";
+    std::cout << "  " << programName << " model <file.p3d>       Inspect a model\n";
     std::cout << "  --group <n>             Group following files into one texture\n";
     std::cout << "  --role <name>           Force the role of following files\n";
 }
@@ -63,6 +66,74 @@ arma3::Quality parseQuality(const std::string& value) {
     if (value == "fast") return arma3::Quality::Fast;
     if (value == "high") return arma3::Quality::High;
     return arma3::Quality::Normal;
+}
+
+int runModel(int argc, char** argv) {
+    if (argc < 3) {
+        std::cerr << "model requires a .p3d file\n";
+        return 1;
+    }
+
+    const std::string path = argv[2];
+    const arma3::P3DInfo info = arma3::ReadP3DInfo(path.c_str());
+
+    if (!info.valid) {
+        std::cerr << "Could not read " << path << "\n";
+        for (const auto& warning : info.warnings) {
+            std::cerr << "  " << warning << "\n";
+        }
+        return 1;
+    }
+
+    std::cout << fs::path(path).filename().string() << "\n";
+    std::cout << "  format     " << info.type << " v" << info.version << "\n";
+    std::cout << "  lods       " << info.lodCount << "\n";
+    std::cout << "  vertices   " << info.totalVertices << "\n";
+    std::cout << "  faces      " << info.totalFaces << "\n";
+
+    if (!info.lods.empty()) {
+        std::cout << "\nLODs:\n";
+        for (const auto& lod : info.lods) {
+            std::cout << "  " << arma3::GetLODTypeName(lod.resolution)
+                      << "  (" << lod.points.size() << " points, "
+                      << lod.faces.size() << " faces)\n";
+        }
+    }
+
+    if (!info.allTextures.empty()) {
+        std::cout << "\nTextures (" << info.allTextures.size() << "):\n";
+        for (const auto& texture : info.allTextures) {
+            std::cout << "  " << texture << "\n";
+        }
+    }
+
+    if (!info.allSelections.empty()) {
+        std::cout << "\nSelections (" << info.allSelections.size() << "):\n";
+        size_t shown = 0;
+        for (const auto& selection : info.allSelections) {
+            if (shown++ == 20) {
+                std::cout << "  ... and " << (info.allSelections.size() - 20) << " more\n";
+                break;
+            }
+            std::cout << "  " << selection << "\n";
+        }
+    }
+
+    if (!info.namedProperties.empty()) {
+        std::cout << "\nProperties:\n";
+        for (const auto& property : info.namedProperties) {
+            std::cout << "  " << property.key << " = " << property.value << "\n";
+        }
+    }
+
+    if (!info.warnings.empty()) {
+        std::cout << "\nNotes:\n";
+        for (const auto& warning : info.warnings) {
+            std::cout << "  " << warning << "\n";
+        }
+    }
+
+    return 0;
 }
 
 int runPlan(int argc, char** argv, bool execute) {
@@ -562,6 +633,16 @@ int main(int argc, char** argv) {
     if (argc < 2) {
         printUsage(argv[0]);
         return 1;
+    }
+
+    if (std::string(argv[1]) == "model") {
+        try {
+            return runModel(argc, argv);
+        }
+        catch (const std::exception& e) {
+            std::cerr << "Error: " << e.what() << "\n";
+            return 1;
+        }
     }
 
     if (std::string(argv[1]) == "plan" || std::string(argv[1]) == "auto") {
