@@ -40,7 +40,10 @@ public:
     void setSwizzle(SwizzleType type) { preset.swizzle = type; }
 
     void setSource(int index, const ImageData& image);
+    // Collapses every slot fed by this source onto one channel, so it only
+    // makes sense where the source feeds a single slot.
     void setSourceChannel(int index, PackChannel channel);
+    int sourceSlotCount(int index) const;
     void setSourceInvert(int index, bool invert);
     void setTargetSize(uint32_t width, uint32_t height);
 

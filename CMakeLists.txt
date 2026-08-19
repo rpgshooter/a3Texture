@@ -12,6 +12,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(unofficial-libsquish CONFIG REQUIRED)
 find_package(PNG REQUIRED)
 find_package(TIFF REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
@@ -46,6 +47,7 @@ target_link_libraries(arma3-paa-cli PRIVATE
     unofficial::libsquish::squish
     PNG::PNG
     TIFF::TIFF
+    nlohmann_json::nlohmann_json
     ${LZO_LIBRARY}
 )
 

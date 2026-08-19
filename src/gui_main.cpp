@@ -412,6 +412,15 @@ private:
         ImGui::Separator();
         ImGui::Spacing();
 
+        bool multiSlot[4] = {false, false, false, false};
+        for (int i = 0; i < preset->sourceCount; i++) {
+            int used = 0;
+            for (const auto& slot : preset->slots) {
+                if (slot.source == i) used++;
+            }
+            multiSlot[i] = used > 1;
+        }
+
         for (int i = 0; i < preset->sourceCount; i++) {
             ImGui::PushID(i);
 
@@ -433,10 +442,18 @@ private:
             }
 
             ImGui::SameLine();
-            ImGui::SetNextItemWidth(70);
-            ImGui::Combo("##ch", &packSlots[i].channel, "R\0G\0B\0A\0");
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Which channel to read from this image");
+            if (multiSlot[i]) {
+                // All of this image's channels are used, so there is nothing to pick.
+                ImGui::TextColored(kDim, " RGB ");
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("This map is used whole, not one channel of it");
+                }
+            } else {
+                ImGui::SetNextItemWidth(70);
+                ImGui::Combo("##ch", &packSlots[i].channel, "R\0G\0B\0A\0");
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Which channel to read from this image");
+                }
             }
 
             ImGui::SameLine();
@@ -547,7 +564,10 @@ private:
 
             for (int i = 0; i < preset->sourceCount; i++) {
                 packer.setSource(i, arma3::ImageLoader::load(packSlots[i].path));
-                packer.setSourceChannel(i, static_cast<arma3::PackChannel>(packSlots[i].channel));
+                if (packer.sourceSlotCount(i) == 1) {
+                    packer.setSourceChannel(
+                        i, static_cast<arma3::PackChannel>(packSlots[i].channel));
+                }
                 packer.setSourceInvert(i, packSlots[i].invert);
             }
 
