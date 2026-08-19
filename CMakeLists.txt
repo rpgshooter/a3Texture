@@ -9,6 +9,17 @@ project(Arma3PAA VERSION 1.0.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if(WIN32)
+    # windows.h defines min and max as macros, which breaks std::min and
+    # std::max wherever it is pulled in.
+    add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
+endif()
+
+if(MSVC)
+    # Sources are UTF-8; without this MSVC reads them as the system code page.
+    add_compile_options(/utf-8)
+endif()
+
 find_package(unofficial-libsquish CONFIG REQUIRED)
 find_package(PNG REQUIRED)
 find_package(TIFF REQUIRED)
