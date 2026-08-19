@@ -79,12 +79,14 @@ struct SwizzlePreset {
 
 const SwizzlePreset* swizzlePreset(SwizzleType type) {
     static const SwizzlePreset nohq{{0x05, 0x04, 0x02, 0x03}, PAAFormat::DXT5, FlagPolicy::Never};
+    static const SwizzlePreset no{{0x08, 0x01, 0x02, 0x03}, PAAFormat::DXT1, FlagPolicy::Never};
     static const SwizzlePreset smdi{{0x08, 0x08, 0x02, 0x03}, PAAFormat::DXT1, FlagPolicy::Never};
     static const SwizzlePreset as{{0x08, 0x08, 0x02, 0x08}, PAAFormat::DXT1, FlagPolicy::Never};
     static const SwizzlePreset dt{{0x08, 0x00, 0x00, 0x00}, PAAFormat::DXT1, FlagPolicy::Always};
 
     switch (type) {
         case SwizzleType::NOHQ: return &nohq;
+        case SwizzleType::NO:   return &no;
         case SwizzleType::SMDI: return &smdi;
         case SwizzleType::AS:   return &as;
         case SwizzleType::DT:   return &dt;
@@ -121,7 +123,8 @@ void applySwizzle(MipMap& mipmap, const std::vector<uint8_t>& bytes, unsigned th
 }
 
 SwizzleType swizzleFromBytes(const std::vector<uint8_t>& data) {
-    for (auto type : {SwizzleType::NOHQ, SwizzleType::SMDI, SwizzleType::AS, SwizzleType::DT}) {
+    for (auto type : {SwizzleType::NOHQ, SwizzleType::NO, SwizzleType::SMDI,
+                      SwizzleType::AS, SwizzleType::DT}) {
         const auto* bytes = swizzleBytes(type);
         if (bytes && *bytes == data) {
             return type;
@@ -322,6 +325,7 @@ void PAA::calculateMipmapsAndTaggs() {
 const char* PAA::swizzleName(SwizzleType type) {
     switch (type) {
         case SwizzleType::NOHQ: return "nohq";
+        case SwizzleType::NO:   return "no";
         case SwizzleType::SMDI: return "smdi";
         case SwizzleType::AS:   return "as";
         case SwizzleType::DT:   return "dt";
@@ -345,6 +349,7 @@ SwizzleType PAA::swizzleFromFilename(const std::string& filename) {
 
     const std::pair<const char*, SwizzleType> suffixes[] = {
         {"_nohq", SwizzleType::NOHQ},
+        {"_no",   SwizzleType::NO},
         {"_smdi", SwizzleType::SMDI},
         {"_as",   SwizzleType::AS},
         {"_dt",   SwizzleType::DT}

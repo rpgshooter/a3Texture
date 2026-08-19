@@ -25,6 +25,7 @@ enum class SwizzleMode {
 enum class SwizzleType {
     NONE,
     NOHQ,
+    NO,
     SMDI,
     AS,
     DT
