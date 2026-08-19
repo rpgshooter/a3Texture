@@ -29,14 +29,6 @@ jobs:
           libx11-dev libxft-dev libxext-dev libwayland-dev libxkbcommon-dev \
           libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
 
-    - name: Setup Ninja
-      if: runner.os == 'Windows'
-      uses: seanmiddleditch/gha-setup-ninja@v4
-
-    - name: Setup MSVC environment
-      if: runner.os == 'Windows'
-      uses: ilammy/msvc-dev-cmd@v1
-
     - name: Bootstrap vcpkg (Linux)
       if: runner.os == 'Linux'
       run: ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
@@ -45,11 +37,21 @@ jobs:
       if: runner.os == 'Windows'
       run: .\vcpkg\bootstrap-vcpkg.bat -disableMetrics
 
-    - name: Configure
+    - name: Configure (Linux)
+      if: runner.os == 'Linux'
       run: cmake --preset release
 
-    - name: Build
+    - name: Build (Linux)
+      if: runner.os == 'Linux'
       run: cmake --build --preset release
+
+    - name: Configure (Windows)
+      if: runner.os == 'Windows'
+      run: cmake --preset windows-release
+
+    - name: Build (Windows)
+      if: runner.os == 'Windows'
+      run: cmake --build --preset windows-release
 
     - name: Upload CLI artifact
       uses: actions/upload-artifact@v4
@@ -57,7 +59,7 @@ jobs:
         name: arma3-paa-cli-${{ runner.os }}
         path: |
           build/release/arma3-paa-cli
-          build/release/arma3-paa-cli.exe
+          build/windows-release/Release/arma3-paa-cli.exe
         if-no-files-found: ignore
 
     - name: Upload GUI artifact
@@ -66,7 +68,7 @@ jobs:
         name: arma3-paa-gui-${{ runner.os }}
         path: |
           build/release/arma3-paa-gui
-          build/release/arma3-paa-gui.exe
+          build/windows-release/Release/arma3-paa-gui.exe
         if-no-files-found: ignore
 
   release:
