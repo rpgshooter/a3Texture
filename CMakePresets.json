@@ -37,8 +37,6 @@
             "name": "windows-debug",
             "displayName": "windows-debug",
             "inherits": "base",
-            "generator": "Visual Studio 17 2022",
-            "architecture": "x64",
             "binaryDir": "${sourceDir}/build/windows-debug",
             "condition": {
                 "type": "equals",
@@ -50,8 +48,6 @@
             "name": "windows-release",
             "displayName": "windows-release",
             "inherits": "base",
-            "generator": "Visual Studio 17 2022",
-            "architecture": "x64",
             "binaryDir": "${sourceDir}/build/windows-release",
             "condition": {
                 "type": "equals",

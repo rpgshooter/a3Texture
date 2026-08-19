@@ -11,11 +11,21 @@
     "stb",
     {
       "name": "imgui",
-      "features": ["opengl3-binding", "glfw-binding"]
+      "features": [
+        "opengl3-binding",
+        "glfw-binding"
+      ]
     },
     {
       "name": "glfw3",
-      "features": ["wayland"]
+      "features": [
+        "wayland"
+      ],
+      "platform": "linux"
+    },
+    {
+      "name": "glfw3",
+      "platform": "!linux"
     },
     "glad",
     "portable-file-dialogs"

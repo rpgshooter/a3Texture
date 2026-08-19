@@ -59,7 +59,7 @@ jobs:
         name: arma3-paa-cli-${{ runner.os }}
         path: |
           build/release/arma3-paa-cli
-          build/windows-release/Release/arma3-paa-cli.exe
+          build/windows-release/**/arma3-paa-cli.exe
         if-no-files-found: ignore
 
     - name: Upload GUI artifact
@@ -68,7 +68,7 @@ jobs:
         name: arma3-paa-gui-${{ runner.os }}
         path: |
           build/release/arma3-paa-gui
-          build/windows-release/Release/arma3-paa-gui.exe
+          build/windows-release/**/arma3-paa-gui.exe
         if-no-files-found: ignore
 
   release:
