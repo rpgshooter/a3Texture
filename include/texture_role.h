@@ -32,6 +32,7 @@ struct SourceFile {
     TextureRole role = TextureRole::Ignore;
     bool invert = false;
     std::string baseName;              // filename with the role token removed
+    int group = 0;                     // 0 groups by name, otherwise by this number
     SwizzleType armaType = SwizzleType::NONE;  // when role is ArmaMap
 };
 
