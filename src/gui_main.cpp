@@ -1700,6 +1700,13 @@ private:
                                   "carry its own material");
             }
 
+            ImGui::SameLine();
+            if (slots.empty()) {
+                ImGui::TextColored(kDim, "no textures, shading the whole model");
+            } else {
+                ImGui::TextColored(kDim, "%d of %zu", appliedSections, slots.size());
+            }
+
             ImGui::Spacing();
             if (ImGui::Button("Apply to model", ImVec2(150, 32))) applyMaterialToModel(false);
             ImGui::SameLine();
@@ -1804,29 +1811,42 @@ private:
 
     // Colours are cheap enough to push every frame; textures are only touched
     // when the stage actually points somewhere new.
+    arma3::MaterialProperties asRendererMaterial() const {
+        arma3::MaterialProperties properties;
+        for (int c = 0; c < 4; c++) {
+            properties.ambient[c] = material.ambient[c];
+            properties.diffuse[c] = material.diffuse[c];
+            properties.specular[c] = material.specular[c];
+            properties.emissive[c] = material.emissive[c];
+        }
+        properties.specularPower = material.specularPower;
+        properties.hasRvmat = true;
+        return properties;
+    }
+
     void applyMaterialToModel(bool quiet) {
+        const arma3::MaterialProperties properties = asRendererMaterial();
         auto& slots = renderer.GetTextureSlotsMutable();
 
+        appliedSections = 0;
         for (size_t i = 0; i < slots.size(); i++) {
             // -1 means every section; otherwise only the chosen one changes.
             if (materialSlot >= 0 && int(i) != materialSlot) continue;
-            auto& slot = slots[i];
-            for (int i = 0; i < 4; i++) {
-                slot.material.ambient[i] = material.ambient[i];
-                slot.material.diffuse[i] = material.diffuse[i];
-                slot.material.specular[i] = material.specular[i];
-                slot.material.emissive[i] = material.emissive[i];
-            }
-            slot.material.specularPower = material.specularPower;
-            slot.material.hasRvmat = true;
+            slots[i].material = properties;
+            appliedSections++;
+        }
+
+        // A model with no textures has no sections to carry a material, so it
+        // would otherwise ignore everything set here.
+        if (slots.empty()) {
+            renderer.SetDefaultMaterial(properties);
         }
 
         applyStageTexture(1, appliedNormal, true);
         applyStageTexture(5, appliedSpecular, false);
 
         if (!quiet) {
-            materialStatus = slots.empty() ? "The model has no textures to apply it to"
-                                           : "Applied to the model";
+            materialStatus = "Applied";
         }
     }
 
@@ -2010,6 +2030,7 @@ private:
     bool materialActive = false;
     bool materialLive = true;
     int materialSlot = -1;   // -1 applies to every section
+    int appliedSections = 0;
     std::string appliedNormal;
     std::string appliedSpecular;
     char pixelFilter[64] = {0};

@@ -112,6 +112,12 @@ public:
 	// _as (ambient shadow)
 	bool LoadAllTextures(const std::string& basePath);	// Load all related textures from base name
 	bool LoadDiffuseTexture(const std::string& path);
+
+	// Used for sections with no material of their own, and for a model that
+	// carries no textures at all.
+	void SetDefaultMaterial(const MaterialProperties& material) {
+		m_DefaultMaterial = material;
+	}
 	bool LoadNormalTexture(const std::string& path);
 	bool LoadSpecularTexture(const std::string& path);
 	void ClearAllTextures();
