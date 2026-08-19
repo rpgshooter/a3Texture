@@ -98,6 +98,28 @@ const std::vector<uint8_t>* swizzleBytes(SwizzleType type) {
     return preset ? &preset->bytes : nullptr;
 }
 
+uint8_t sampleSwizzle(const uint8_t* pixel, uint8_t selector) {
+    if (selector == 0x08) {
+        return 255;
+    }
+    // Selector indexes A,R,G,B; the buffer is RGBA.
+    static const int order[4] = {3, 0, 1, 2};
+    const uint8_t value = pixel[order[selector & 0x03]];
+    return (selector >= 0x04) ? static_cast<uint8_t>(255 - value) : value;
+}
+
+void applySwizzle(MipMap& mipmap, const std::vector<uint8_t>& bytes, unsigned threads) {
+    const size_t pixels = mipmap.data.size() / 4;
+    parallelFor(pixels, threads, [&](size_t i) {
+        uint8_t* pixel = mipmap.data.data() + i * 4;
+        const uint8_t source[4] = {pixel[0], pixel[1], pixel[2], pixel[3]};
+        pixel[3] = sampleSwizzle(source, bytes[0]);
+        pixel[0] = sampleSwizzle(source, bytes[1]);
+        pixel[1] = sampleSwizzle(source, bytes[2]);
+        pixel[2] = sampleSwizzle(source, bytes[3]);
+    });
+}
+
 SwizzleType swizzleFromBytes(const std::vector<uint8_t>& data) {
     for (auto type : {SwizzleType::NOHQ, SwizzleType::SMDI, SwizzleType::AS, SwizzleType::DT}) {
         const auto* bytes = swizzleBytes(type);
@@ -158,6 +180,7 @@ void PAA::readPAA() {
             hasTransparency = true;
         } else if (tagg.signature == "GGATZIWS") {
             swizzle = swizzleFromBytes(tagg.data);
+            swizzleMode = SwizzleMode::TagOnly;
         }
     }
 
@@ -366,6 +389,21 @@ void PAA::writePAA(const std::string& filename, PAAFormat targetFormat) {
 
     // Copy mipmaps for encoding
     std::vector<MipMap> encodedMips = mipMaps;
+
+    if (preset && swizzleMode == SwizzleMode::Apply) {
+        std::vector<uint8_t> transform = preset->bytes;
+
+        // BIS authored _dt detail in the source alpha, but exporters put a
+        // greyscale in RGB. Read red instead when alpha carries nothing; the
+        // stored result is the same either way.
+        if (swizzle == SwizzleType::DT && !hasTransparency) {
+            transform = {0x08, 0x01, 0x01, 0x01};
+        }
+
+        for (auto& mip : encodedMips) {
+            applySwizzle(mip, transform, threadCount);
+        }
+    }
 
     // Compress with DXT
     if (format == PAAFormat::DXT5 || format == PAAFormat::DXT1) {

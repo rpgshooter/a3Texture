@@ -13,6 +13,13 @@ enum class Quality {
     High
 };
 
+// Source art is authored unswizzled, so the channel transform is applied on
+// write. TagOnly is for input that is already packed.
+enum class SwizzleMode {
+    Apply,
+    TagOnly
+};
+
 enum class SwizzleType {
     NONE,
     NOHQ,
@@ -79,6 +86,9 @@ public:
     SwizzleType getSwizzle() const { return swizzle; }
     static SwizzleType swizzleFromFilename(const std::string& filename);
 
+    void setSwizzleMode(SwizzleMode mode) { swizzleMode = mode; }
+    SwizzleMode getSwizzleMode() const { return swizzleMode; }
+
     // Write image file (PNG)
     void writeImage(const std::string& filename, int mipLevel = 0);
 
@@ -105,6 +115,7 @@ private:
     uint16_t magicNumber = 0xFF05;
     bool hasTransparency = false;
     SwizzleType swizzle = SwizzleType::NONE;
+    SwizzleMode swizzleMode = SwizzleMode::Apply;
     Quality quality = Quality::Normal;
     unsigned threadCount = 0;
 
