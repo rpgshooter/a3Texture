@@ -118,6 +118,39 @@ void applyStyle() {
     c[ImGuiCol_TableBorderStrong]=ImVec4(0.25f, 0.28f, 0.33f, 1.00f);
 }
 
+// Model texture references look like a3\\characters_f\\...\\body_co.tga: a P drive
+// path, backslashed, and naming the source art rather than the shipped .paa.
+inline std::string resolveModelTexture(const std::string& reference,
+                                       const std::string& modelDir,
+                                       const std::string& driveRoot) {
+    std::string relative = reference;
+    std::replace(relative.begin(), relative.end(), '\\', '/');
+    if (relative.empty() || relative.front() == '#') return {};
+
+    const fs::path asPaa = fs::path(relative).replace_extension(".paa");
+    const std::string leaf = asPaa.filename().string();
+
+    std::vector<fs::path> candidates;
+    if (!driveRoot.empty()) {
+        candidates.push_back(fs::path(driveRoot) / asPaa);
+        candidates.push_back(fs::path(driveRoot) / relative);
+    }
+    if (!modelDir.empty()) {
+        candidates.push_back(fs::path(modelDir) / asPaa);
+        candidates.push_back(fs::path(modelDir) / leaf);
+        candidates.push_back(fs::path(modelDir) / "data" / leaf);
+        candidates.push_back(fs::path(modelDir).parent_path() / "data" / leaf);
+    }
+
+    std::error_code ec;
+    for (const auto& candidate : candidates) {
+        if (fs::exists(candidate, ec) && fs::is_regular_file(candidate, ec)) {
+            return candidate.string();
+        }
+    }
+    return {};
+}
+
 const ImVec4 kAccent(0.40f, 0.82f, 0.88f, 1.00f);
 const ImVec4 kOk(0.44f, 0.84f, 0.53f, 1.00f);
 const ImVec4 kBad(0.93f, 0.45f, 0.40f, 1.00f);
@@ -1046,11 +1079,15 @@ private:
         std::vector<std::string> hidden;
         if (hideProxies) hidden = modelInfo.proxySelections;
 
+        std::map<std::string, int> textureMap;
+
         arma3::Mesh mesh;
-        if (!arma3::ConvertP3DToMesh(lod, mesh, hidden)) {
+        if (!arma3::ConvertP3DToMesh(lod, mesh, hidden, "", &textureMap)) {
             modelError = "Could not build a mesh from this LOD";
             return;
         }
+
+        loadModelTextures(textureMap, mesh);
 
         arma3::RendererMesh renderMesh;
         renderMesh.vertices.reserve(mesh.vertices.size());
@@ -1070,6 +1107,48 @@ private:
 
         renderer.LoadMesh(renderMesh);
         renderer.FrameObject();
+    }
+
+    // Adds a slot per referenced texture and repoints the mesh at the slots
+    // that actually loaded, since a failed one is not added at all.
+    void loadModelTextures(const std::map<std::string, int>& textureMap, arma3::Mesh& mesh) {
+        renderer.ClearTextureSlots();
+        missingTextures.clear();
+        loadedTextures = 0;
+
+        const std::string modelDir = fs::path(modelPath).parent_path().string();
+
+        std::vector<std::string> byIndex(textureMap.size());
+        for (const auto& [reference, index] : textureMap) {
+            if (index >= 0 && index < int(byIndex.size())) byIndex[index] = reference;
+        }
+
+        std::vector<int> remap(byIndex.size(), -1);
+        for (size_t i = 0; i < byIndex.size(); i++) {
+            if (byIndex[i].empty()) continue;
+
+            const std::string resolved =
+                resolveModelTexture(byIndex[i], modelDir, textureRoot);
+            if (resolved.empty()) {
+                missingTextures.push_back(byIndex[i]);
+                continue;
+            }
+
+            const int slot = renderer.AddTextureSlotWithMaterial(resolved);
+            if (slot < 0) {
+                missingTextures.push_back(byIndex[i]);
+                continue;
+            }
+            remap[i] = slot;
+            loadedTextures++;
+        }
+
+        for (auto& vertex : mesh.vertices) {
+            const int original = int(vertex.texIndex);
+            vertex.texIndex = (original >= 0 && original < int(remap.size()))
+                ? float(remap[original])
+                : -1.0f;
+        }
     }
 
     void renderModel() {
@@ -1115,6 +1194,22 @@ private:
                                modelInfo.totalVertices, modelInfo.totalFaces);
         }
 
+        ImGui::Spacing();
+        ImGui::SetNextItemWidth(-260);
+        if (ImGui::InputTextWithHint("##root", "P drive root, for a3\\... texture paths",
+                                     textureRoot, sizeof(textureRoot))) {
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Browse root...")) {
+            auto folder = pfd::select_folder("Select P drive root", "").result();
+            if (!folder.empty()) {
+                snprintf(textureRoot, sizeof(textureRoot), "%s", folder.c_str());
+                uploadModelLod();
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Reload")) uploadModelLod();
+
         if (!modelError.empty()) {
             ImGui::Spacing();
             ImGui::TextColored(kBad, "%s", modelError.c_str());
@@ -1148,13 +1243,15 @@ private:
             ImGui::BeginGroup();
             ImGui::TextColored(kDim, "Drag to rotate, scroll to zoom");
             if (ImGui::Button("Frame")) renderer.FrameObject();
-            if (!modelInfo.allTextures.empty()) {
-                ImGui::Spacing();
-                ImGui::TextColored(kDim, "Textures");
-                for (const auto& texture : modelInfo.allTextures) {
-                    ImGui::TextColored(kDim, "  %s",
-                                       fs::path(texture).filename().string().c_str());
-                }
+            ImGui::Spacing();
+            ImGui::TextColored(kDim, "Textures");
+            ImGui::TextColored(loadedTextures ? kOk : kDim, "  %d loaded", loadedTextures);
+            for (const auto& missing : missingTextures) {
+                ImGui::TextColored(kBad, "  missing");
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", missing.c_str());
+                ImGui::SameLine();
+                ImGui::TextColored(kDim, "%s",
+                                   fs::path(missing).filename().string().c_str());
             }
             ImGui::EndGroup();
         } else if (modelInfo.valid && modelError.empty()) {
@@ -1311,6 +1408,9 @@ private:
     std::string modelError;
     int modelLod = 0;
     bool hideProxies = true;
+    char textureRoot[512] = {0};
+    int loadedTextures = 0;
+    std::vector<std::string> missingTextures;
 
     std::string viewPath;
     std::string viewError;
