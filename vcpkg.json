@@ -1,5 +1,5 @@
 {
-  "name": "arma3-paa-converter",
+  "name": "a3texture",
   "version": "1.0.0",
   "description": "Native C++ PAA converter for Arma 3 textures",
   "dependencies": [

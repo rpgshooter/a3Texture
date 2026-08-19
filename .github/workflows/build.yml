@@ -56,19 +56,19 @@ jobs:
     - name: Upload CLI artifact
       uses: actions/upload-artifact@v4
       with:
-        name: arma3-paa-cli-${{ runner.os }}
+        name: a3texture-cli-${{ runner.os }}
         path: |
-          build/release/arma3-paa-cli
-          build/release/arma3-paa-cli.exe
+          build/release/a3texture-cli
+          build/release/a3texture-cli.exe
         if-no-files-found: ignore
 
     - name: Upload GUI artifact
       uses: actions/upload-artifact@v4
       with:
-        name: arma3-paa-gui-${{ runner.os }}
+        name: a3texture-gui-${{ runner.os }}
         path: |
-          build/release/arma3-paa-gui
-          build/release/arma3-paa-gui.exe
+          build/release/a3texture-gui
+          build/release/a3texture-gui.exe
         if-no-files-found: ignore
 
   release:
@@ -82,25 +82,25 @@ jobs:
     - name: Download Windows CLI
       uses: actions/download-artifact@v4
       with:
-        name: arma3-paa-cli-Windows
+        name: a3texture-cli-Windows
         path: windows-cli
 
     - name: Download Windows GUI
       uses: actions/download-artifact@v4
       with:
-        name: arma3-paa-gui-Windows
+        name: a3texture-gui-Windows
         path: windows-gui
 
     - name: Download Linux CLI
       uses: actions/download-artifact@v4
       with:
-        name: arma3-paa-cli-Linux
+        name: a3texture-cli-Linux
         path: linux-cli
 
     - name: Download Linux GUI
       uses: actions/download-artifact@v4
       with:
-        name: arma3-paa-gui-Linux
+        name: a3texture-gui-Linux
         path: linux-gui
 
     - name: Create Release
@@ -111,7 +111,7 @@ jobs:
         draft: false
         prerelease: false
         files: |
-          windows-cli/arma3-paa-cli.exe
-          windows-gui/arma3-paa-gui.exe
-          linux-cli/arma3-paa-cli
-          linux-gui/arma3-paa-gui
+          windows-cli/a3texture-cli.exe
+          windows-gui/a3texture-gui.exe
+          linux-cli/a3texture-cli
+          linux-gui/a3texture-gui

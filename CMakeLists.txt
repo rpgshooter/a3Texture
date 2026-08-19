@@ -4,7 +4,7 @@ if(POLICY CMP0167)
     cmake_policy(SET CMP0167 NEW)
 endif()
 
-project(Arma3PAA VERSION 1.0.0 LANGUAGES C CXX)
+project(A3Texture VERSION 1.0.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -43,6 +43,7 @@ set(SOURCES
     src/texture_role.cpp
     src/job_runner.cpp
     src/p3d_reader.cpp
+    src/rvmat_writer.cpp
 )
 
 set(HEADERS
@@ -52,6 +53,7 @@ set(HEADERS
     include/texture_role.h
     include/job_runner.h
     include/p3d_reader.h
+    include/rvmat_writer.h
     include/viewer_3d.h
     include/model_renderer.h
     include/paa_texture.h
@@ -63,9 +65,9 @@ set(HEADERS
 #=============================================================================
 # CLI Executable
 #=============================================================================
-add_executable(arma3-paa-cli ${SOURCES} ${HEADERS})
+add_executable(a3texture-cli ${SOURCES} ${HEADERS})
 
-target_link_libraries(arma3-paa-cli PRIVATE
+target_link_libraries(a3texture-cli PRIVATE
     unofficial::libsquish::squish
     PNG::PNG
     TIFF::TIFF
@@ -73,7 +75,7 @@ target_link_libraries(arma3-paa-cli PRIVATE
     ${LZO_LIBRARY}
 )
 
-target_include_directories(arma3-paa-cli PRIVATE ${Stb_INCLUDE_DIR} ${LZO_INCLUDE_DIR})
+target_include_directories(a3texture-cli PRIVATE ${Stb_INCLUDE_DIR} ${LZO_INCLUDE_DIR})
 
 #=============================================================================
 # GUI Application
@@ -86,15 +88,16 @@ set(GUI_SOURCES
     src/texture_role.cpp
     src/job_runner.cpp
     src/p3d_reader.cpp
+    src/rvmat_writer.cpp
     src/viewer_3d.cpp
     src/model_renderer.cpp
     src/paa_texture.cpp
     src/rvmat_parser.cpp
 )
 
-add_executable(arma3-paa-gui ${GUI_SOURCES})
+add_executable(a3texture-gui ${GUI_SOURCES})
 
-target_link_libraries(arma3-paa-gui PRIVATE
+target_link_libraries(a3texture-gui PRIVATE
     unofficial::libsquish::squish
     PNG::PNG
     TIFF::TIFF
@@ -104,14 +107,14 @@ target_link_libraries(arma3-paa-gui PRIVATE
     glad::glad
 )
 
-target_include_directories(arma3-paa-gui PRIVATE
+target_include_directories(a3texture-gui PRIVATE
     ${Stb_INCLUDE_DIR}
     ${PORTABLE_FILE_DIALOGS_INCLUDE_DIRS}
     ${LZO_INCLUDE_DIR}
 )
 
 # Installation
-install(TARGETS arma3-paa-cli arma3-paa-gui DESTINATION bin)
+install(TARGETS a3texture-cli a3texture-gui DESTINATION bin)
 
 message(STATUS "Configuration:")
 message(STATUS "  Platform: ${CMAKE_SYSTEM_NAME}")

@@ -4,6 +4,7 @@
 #include "../include/texture_role.h"
 #include "../include/job_runner.h"
 #include "../include/p3d_reader.h"
+#include "../include/rvmat_writer.h"
 
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -58,6 +59,9 @@ void printUsage(const char* programName) {
     std::cout << "  " << programName << " auto <files...> [--output-dir <dir>]\n";
     std::cout << "\nModels:\n";
     std::cout << "  " << programName << " model <file.p3d>       Inspect a model\n";
+    std::cout << "\nMaterials:\n";
+    std::cout << "  " << programName << " rvmat <texture> [-o <out.rvmat>] [--template <name>]\n";
+    std::cout << "  --root <dir>            P drive root, so texture paths suit the engine\n";
     std::cout << "  --group <n>             Group following files into one texture\n";
     std::cout << "  --role <name>           Force the role of following files\n";
 }
@@ -66,6 +70,66 @@ arma3::Quality parseQuality(const std::string& value) {
     if (value == "fast") return arma3::Quality::Fast;
     if (value == "high") return arma3::Quality::High;
     return arma3::Quality::Normal;
+}
+
+int runRvmat(int argc, char** argv) {
+    if (argc < 3) {
+        std::cerr << "rvmat needs a texture from the set, e.g. hull_co.paa\n";
+        return 1;
+    }
+
+    std::string source;
+    std::string output;
+    std::string templateName;
+    std::string driveRoot;
+
+    for (int i = 2; i < argc; i++) {
+        const std::string arg = argv[i];
+        if ((arg == "-o" || arg == "--output") && i + 1 < argc) {
+            output = argv[++i];
+        } else if (arg == "--template" && i + 1 < argc) {
+            templateName = argv[++i];
+        } else if (arg == "--root" && i + 1 < argc) {
+            driveRoot = argv[++i];
+        } else if (source.empty()) {
+            source = arg;
+        }
+    }
+
+    if (source.empty()) {
+        std::cerr << "rvmat needs a texture from the set\n";
+        return 1;
+    }
+
+    arma3::RvmatMaterial material = arma3::materialForTextureSet(source, driveRoot);
+
+    if (!templateName.empty()) {
+        const arma3::RvmatMaterial preset = arma3::rvmatTemplate(templateName);
+        material.ambient = preset.ambient;
+        material.diffuse = preset.diffuse;
+        material.forcedDiffuse = preset.forcedDiffuse;
+        material.emissive = preset.emissive;
+        material.specular = preset.specular;
+        material.specularPower = preset.specularPower;
+        material.pixelShaderID = preset.pixelShaderID;
+        material.vertexShaderID = preset.vertexShaderID;
+    }
+
+    const std::string text = arma3::writeRvmat(material);
+
+    if (output.empty()) {
+        std::cout << text;
+        return 0;
+    }
+
+    std::ofstream file(output, std::ios::binary);
+    if (!file) {
+        std::cerr << "Cannot write " << output << "\n";
+        return 1;
+    }
+    file << text;
+    std::cout << "\u2713 " << output << "\n";
+    return 0;
 }
 
 int runModel(int argc, char** argv) {
@@ -633,6 +697,16 @@ int main(int argc, char** argv) {
     if (argc < 2) {
         printUsage(argv[0]);
         return 1;
+    }
+
+    if (std::string(argv[1]) == "rvmat") {
+        try {
+            return runRvmat(argc, argv);
+        }
+        catch (const std::exception& e) {
+            std::cerr << "Error: " << e.what() << "\n";
+            return 1;
+        }
     }
 
     if (std::string(argv[1]) == "model") {

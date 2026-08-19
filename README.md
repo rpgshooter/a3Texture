@@ -37,7 +37,7 @@ setx VCPKG_ROOT "C:\path\to\vcpkg"
 ### 2. Build the Project
 
 ```bash
-cd arma3-paa-converter-native
+cd a3texture
 mkdir build
 cd build
 cmake .. -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake
@@ -58,7 +58,7 @@ vcpkg will automatically install all dependencies:
 ### GUI Application
 
 ```bash
-./build/Release/arma3-paa-gui.exe
+./build/Release/a3texture-gui.exe
 ```
 
 Features:
@@ -71,13 +71,13 @@ Features:
 
 **Single file:**
 ```bash
-arma3-paa-cli texture.png texture.paa
-arma3-paa-cli texture.png texture.paa --format DXT5
+a3texture-cli texture.png texture.paa
+a3texture-cli texture.png texture.paa --format DXT5
 ```
 
 **Batch conversion:**
 ```bash
-arma3-paa-cli --batch "*.png" --output-dir ./paa/
+a3texture-cli --batch "*.png" --output-dir ./paa/
 ```
 
 ## Technical Details
