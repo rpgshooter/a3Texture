@@ -2,6 +2,9 @@
 #include "../include/image_loader.h"
 #include "../include/channel_packer.h"
 #include "../include/texture_role.h"
+#include "../include/p3d_reader.h"
+#include "../include/viewer_3d.h"
+#include "../include/model_renderer.h"
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -223,6 +226,11 @@ public:
                 renderViewer();
                 ImGui::EndTabItem();
             }
+            if (ImGui::BeginTabItem("Model")) {
+                activeTab = 3;
+                renderModel();
+                ImGui::EndTabItem();
+            }
             ImGui::EndTabBar();
         }
 
@@ -240,6 +248,12 @@ public:
             if (ext == ".paa") {
                 accepted++;
                 openPaa(file);
+                continue;
+            }
+
+            if (ext == ".p3d") {
+                accepted++;
+                openModel(file);
                 continue;
             }
 
@@ -980,6 +994,174 @@ private:
         }
     }
 
+
+    // ------------------------------------------------------------------ model
+
+    void openModel(const std::string& path) {
+        modelError.clear();
+        modelInfo = arma3::ReadP3DInfo(path.c_str());
+        modelPath = path;
+        modelLod = 0;
+
+        if (!modelInfo.valid) {
+            modelError = "Could not read the model";
+            for (const auto& warning : modelInfo.warnings) modelError += "\n" + warning;
+            return;
+        }
+
+        // Prefer the first LOD that actually has geometry.
+        for (size_t i = 0; i < modelInfo.lods.size(); i++) {
+            if (!modelInfo.lods[i].faces.empty()) {
+                modelLod = int(i);
+                break;
+            }
+        }
+        uploadModelLod();
+    }
+
+    void uploadModelLod() {
+        if (!renderer.IsInitialized()) {
+            if (!renderer.Initialize()) {
+                modelError = "Could not start the 3D renderer";
+                return;
+            }
+        }
+
+        if (modelLod < 0 || modelLod >= int(modelInfo.lods.size())) return;
+
+        const arma3::P3DLOD& lod = modelInfo.lods[modelLod];
+        if (lod.faces.empty()) {
+            renderer.ClearMesh();
+            modelError = modelInfo.type == "ODOL"
+                ? "Binarized model: it carries no editable geometry, so there is "
+                  "nothing to draw. Metadata and textures are still listed."
+                : "This LOD has no faces";
+            return;
+        }
+
+        modelError.clear();
+
+        // Proxies are real geometry and dominate the bounds, so framing a
+        // character puts it in the distance unless they are left out.
+        std::vector<std::string> hidden;
+        if (hideProxies) hidden = modelInfo.proxySelections;
+
+        arma3::Mesh mesh;
+        if (!arma3::ConvertP3DToMesh(lod, mesh, hidden)) {
+            modelError = "Could not build a mesh from this LOD";
+            return;
+        }
+
+        arma3::RendererMesh renderMesh;
+        renderMesh.vertices.reserve(mesh.vertices.size());
+        for (const auto& v : mesh.vertices) {
+            renderMesh.vertices.push_back({v.x, v.y, v.z, v.nx, v.ny, v.nz,
+                                           v.u, v.v, v.highlight, v.texIndex});
+        }
+        for (int i = 0; i < 3; i++) {
+            renderMesh.boundsMin[i] = mesh.boundsMin[i];
+            renderMesh.boundsMax[i] = mesh.boundsMax[i];
+            renderMesh.center[i] = mesh.center[i];
+        }
+        renderMesh.size = std::max({mesh.boundsMax[0] - mesh.boundsMin[0],
+                                    mesh.boundsMax[1] - mesh.boundsMin[1],
+                                    mesh.boundsMax[2] - mesh.boundsMin[2]});
+        renderMesh.valid = !renderMesh.vertices.empty();
+
+        renderer.LoadMesh(renderMesh);
+        renderer.FrameObject();
+    }
+
+    void renderModel() {
+        ImGui::Spacing();
+        ImGui::TextColored(kDim, "Open a .p3d, or drop one on the window.");
+        ImGui::Spacing();
+
+        if (ImGui::Button("Open .p3d...")) {
+            auto files = pfd::open_file("Open model", "",
+                {"Arma model", "*.p3d", "All files", "*"}).result();
+            if (!files.empty()) openModel(files[0]);
+        }
+
+        if (!modelPath.empty()) {
+            ImGui::SameLine();
+            ImGui::TextColored(kDim, "%s  %s v%u",
+                fs::path(modelPath).filename().string().c_str(),
+                modelInfo.type.c_str(), modelInfo.version);
+        }
+
+        if (modelInfo.valid && !modelInfo.lods.empty()) {
+            ImGui::Spacing();
+            std::string items;
+            for (const auto& lod : modelInfo.lods) {
+                items += arma3::GetLODTypeName(lod.resolution) +
+                         " (" + std::to_string(lod.faces.size()) + " faces)";
+                items.push_back('\0');
+            }
+            items.push_back('\0');
+
+            ImGui::SetNextItemWidth(280);
+            if (ImGui::Combo("LOD", &modelLod, items.c_str())) uploadModelLod();
+
+            ImGui::SameLine(0, 20);
+            if (ImGui::Checkbox("Hide proxies", &hideProxies)) uploadModelLod();
+            if (ImGui::IsItemHovered() && !modelInfo.proxySelections.empty()) {
+                ImGui::SetTooltip("%zu proxy selection(s) in this model",
+                                  modelInfo.proxySelections.size());
+            }
+
+            ImGui::SameLine(0, 20);
+            ImGui::TextColored(kDim, "%d vertices, %d faces total",
+                               modelInfo.totalVertices, modelInfo.totalFaces);
+        }
+
+        if (!modelError.empty()) {
+            ImGui::Spacing();
+            ImGui::TextColored(kBad, "%s", modelError.c_str());
+        }
+
+        ImGui::Spacing();
+
+        const ImVec2 avail = ImGui::GetContentRegionAvail();
+        const ImVec2 size(std::max(320.0f, avail.x - 260.0f),
+                          std::max(240.0f, avail.y - 20.0f));
+
+        if (renderer.IsInitialized() && renderer.HasMesh()) {
+            renderer.SetViewportSize(int(size.x), int(size.y));
+            renderer.Render();
+
+            ImGui::Image((ImTextureID)(intptr_t)renderer.GetOutputTexture(), size,
+                         ImVec2(0, 1), ImVec2(1, 0));
+
+            if (ImGui::IsItemHovered()) {
+                const ImGuiIO& io = ImGui::GetIO();
+                if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                    renderer.RotateArcball(io.MouseDelta.x, io.MouseDelta.y,
+                                           size.x, size.y);
+                }
+                if (io.MouseWheel != 0.0f) {
+                    renderer.AdjustCameraDistance(-io.MouseWheel * 0.4f);
+                }
+            }
+
+            ImGui::SameLine();
+            ImGui::BeginGroup();
+            ImGui::TextColored(kDim, "Drag to rotate, scroll to zoom");
+            if (ImGui::Button("Frame")) renderer.FrameObject();
+            if (!modelInfo.allTextures.empty()) {
+                ImGui::Spacing();
+                ImGui::TextColored(kDim, "Textures");
+                for (const auto& texture : modelInfo.allTextures) {
+                    ImGui::TextColored(kDim, "  %s",
+                                       fs::path(texture).filename().string().c_str());
+                }
+            }
+            ImGui::EndGroup();
+        } else if (modelInfo.valid && modelError.empty()) {
+            ImGui::TextColored(kDim, "Pick a LOD with geometry.");
+        }
+    }
+
     // ---------------------------------------------------------------- actions
 
     void addFiles() {
@@ -1122,6 +1304,13 @@ private:
 
     struct ViewMip { uint32_t width; uint32_t height; std::vector<uint8_t> data; };
     struct ViewTagg { std::string signature; std::vector<uint8_t> data; };
+
+    arma3::P3DInfo modelInfo;
+    arma3::ModelRenderer renderer;
+    std::string modelPath;
+    std::string modelError;
+    int modelLod = 0;
+    bool hideProxies = true;
 
     std::string viewPath;
     std::string viewError;

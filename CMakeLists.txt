@@ -41,6 +41,10 @@ set(HEADERS
     include/texture_role.h
     include/job_runner.h
     include/p3d_reader.h
+    include/viewer_3d.h
+    include/model_renderer.h
+    include/paa_texture.h
+    include/rvmat_parser.h
     include/binary_reader.h
     include/utils.h
 )
@@ -71,6 +75,10 @@ set(GUI_SOURCES
     src/texture_role.cpp
     src/job_runner.cpp
     src/p3d_reader.cpp
+    src/viewer_3d.cpp
+    src/model_renderer.cpp
+    src/paa_texture.cpp
+    src/rvmat_parser.cpp
 )
 
 add_executable(arma3-paa-gui ${GUI_SOURCES})
