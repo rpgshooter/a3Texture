@@ -112,6 +112,7 @@ public:
     // Getters
     PAAFormat getFormat() const { return format; }
     const std::vector<MipMap>& getMipMaps() const { return mipMaps; }
+    const std::vector<Tagg>& getTaggs() const { return taggs; }
     bool hasAlpha() const { return hasTransparency; }
 
 private:
