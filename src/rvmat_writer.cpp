@@ -64,7 +64,9 @@ std::string enginePath(const std::string& path, const std::string& driveRoot) {
     if (!driveRoot.empty()) {
         std::error_code ec;
         const fs::path made = fs::relative(path, driveRoot, ec);
-        if (!ec && !made.empty() && made.native().rfind("..", 0) != 0) {
+        // native() is wide on Windows, so compare through a narrow string.
+        const std::string text = made.generic_string();
+        if (!ec && !text.empty() && text.rfind("..", 0) != 0) {
             relative = made;
         }
     } else {

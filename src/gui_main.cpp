@@ -6,6 +6,8 @@
 #include "../include/viewer_3d.h"
 #include "../include/model_renderer.h"
 #include "../include/rvmat_writer.h"
+#include "../include/rvmat_shaders.h"
+#include "../include/rvmat_parser.h"
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -204,6 +206,37 @@ struct TexturePreview {
 
     bool valid() const { return textures[0] != 0; }
 };
+
+// The shader lists run to 150 entries, so the combo is filtered by typing.
+inline bool shaderCombo(const char* label, std::string& value,
+                        const std::vector<arma3::ShaderInfo>& options, char* filter,
+                        size_t filterSize) {
+    bool changed = false;
+    if (ImGui::BeginCombo(label, value.c_str())) {
+        ImGui::SetNextItemWidth(-1);
+        ImGui::InputTextWithHint("##filter", "type to narrow", filter, filterSize);
+
+        std::string needle = filter;
+        std::transform(needle.begin(), needle.end(), needle.begin(), ::tolower);
+
+        for (const auto& option : options) {
+            std::string name = option.name;
+            std::string lowered = name;
+            std::transform(lowered.begin(), lowered.end(), lowered.begin(), ::tolower);
+            if (!needle.empty() && lowered.find(needle) == std::string::npos) continue;
+
+            if (ImGui::Selectable(option.name, value == option.name)) {
+                value = option.name;
+                changed = true;
+            }
+            if (ImGui::IsItemHovered() && option.description[0]) {
+                ImGui::SetTooltip("%s", option.description);
+            }
+        }
+        ImGui::EndCombo();
+    }
+    return changed;
+}
 
 // Draws the channel switcher and the image. Returns the chosen channel.
 inline void drawChannelSwitcher(int& mode) {
@@ -1434,23 +1467,36 @@ private:
             "the rest get the placeholders retail materials use.");
         ImGui::Spacing();
 
-        if (ImGui::Button("Pick a texture...")) {
+        if (ImGui::Button("New from a texture set...")) {
             askForFiles("Pick any texture from the set",
                         {"Textures", "*.paa *.png *.tga *.tif *.tiff", "All files", "*"},
                         false, [this](std::vector<std::string> files) {
                 if (files.empty()) return;
                 materialSource = files[0];
+                materialPath.clear();
                 rebuildMaterial();
             });
         }
 
-        if (!materialSource.empty()) {
+        ImGui::SameLine();
+        if (ImGui::Button("Open .rvmat...")) {
+            askForFiles("Open material", {"RVMAT", "*.rvmat", "All files", "*"},
+                        false, [this](std::vector<std::string> files) {
+                if (!files.empty()) openRvmat(files[0]);
+            });
+        }
+
+        if (!materialPath.empty()) {
             ImGui::SameLine();
-            ImGui::TextColored(kDim, "%s",
+            ImGui::TextColored(kAccent, "%s",
+                fs::path(materialPath).filename().string().c_str());
+        } else if (!materialSource.empty()) {
+            ImGui::SameLine();
+            ImGui::TextColored(kDim, "from %s",
                 fs::path(materialSource).filename().string().c_str());
         }
 
-        if (materialSource.empty()) return;
+        if (materialSource.empty() && materialPath.empty()) return;
 
         ImGui::Spacing();
         ImGui::Separator();
@@ -1459,15 +1505,22 @@ private:
         ImGui::BeginGroup();
 
         std::string items;
-        for (const auto& name : arma3::rvmatTemplates()) {
-            items += name;
+        for (const auto& type : arma3::materialTypes()) {
+            items += type.name;
             items.push_back('\0');
         }
         items.push_back('\0');
 
-        ImGui::SetNextItemWidth(190);
-        if (ImGui::Combo("Starting point", &materialTemplate, items.c_str())) {
-            applyMaterialTemplate();
+        ImGui::SetNextItemWidth(300);
+        if (ImGui::Combo("Material type", &materialTemplate, items.c_str())) {
+            const auto& types = arma3::materialTypes();
+            if (materialTemplate >= 0 && materialTemplate < int(types.size())) {
+                material.vertexShaderID = types[materialTemplate].vertexShader;
+                material.pixelShaderID = types[materialTemplate].pixelShader;
+            }
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Sets the shader pair this material type uses");
         }
 
         ImGui::Spacing();
@@ -1488,17 +1541,12 @@ private:
             ImGui::SetTooltip("Rough 10-50, normal 50-150, shiny 150-500, mirror 500+");
         }
 
-        char shader[64];
-        snprintf(shader, sizeof(shader), "%s", material.pixelShaderID.c_str());
-        ImGui::SetNextItemWidth(190);
-        if (ImGui::InputText("Pixel shader", shader, sizeof(shader))) {
-            material.pixelShaderID = shader;
-        }
-        snprintf(shader, sizeof(shader), "%s", material.vertexShaderID.c_str());
-        ImGui::SetNextItemWidth(190);
-        if (ImGui::InputText("Vertex shader", shader, sizeof(shader))) {
-            material.vertexShaderID = shader;
-        }
+        ImGui::SetNextItemWidth(300);
+        shaderCombo("Pixel shader", material.pixelShaderID, arma3::pixelShaders(),
+                    pixelFilter, sizeof(pixelFilter));
+        ImGui::SetNextItemWidth(300);
+        shaderCombo("Vertex shader", material.vertexShaderID, arma3::vertexShaders(),
+                    vertexFilter, sizeof(vertexFilter));
 
         ImGui::Spacing();
         ImGui::TextColored(kDim, "Stages");
@@ -1508,11 +1556,25 @@ private:
             snprintf(buffer, sizeof(buffer), "%s", stage.texture.c_str());
 
             const bool procedural = !stage.texture.empty() && stage.texture.front() == '#';
-            ImGui::TextColored(procedural ? kDim : kAccent, "Stage%d", index);
-            ImGui::SameLine(90);
-            ImGui::SetNextItemWidth(-10);
+            ImGui::TextColored(procedural ? kDim : kAccent, "%s", stageName(index));
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Stage%d", index);
+
+            ImGui::SameLine(120);
+            ImGui::SetNextItemWidth(-110);
             if (ImGui::InputText("##tex", buffer, sizeof(buffer))) {
                 stage.texture = buffer;
+            }
+
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Browse")) {
+                const int slot = index;
+                askForFiles("Pick a texture for this stage",
+                            {"Textures", "*.paa", "All files", "*"}, false,
+                            [this, slot](std::vector<std::string> files) {
+                    if (files.empty()) return;
+                    material.stages[slot].texture =
+                        arma3::enginePath(files[0], textureRoot);
+                });
             }
             ImGui::PopID();
         }
@@ -1552,6 +1614,49 @@ private:
                                   ImVec2(-1, ImGui::GetContentRegionAvail().y - 10),
                                   ImGuiInputTextFlags_ReadOnly);
         ImGui::EndGroup();
+    }
+
+    // Stages have fixed meanings, so name them rather than number them.
+    static const char* stageName(int index) {
+        switch (index) {
+            case 1: return "Normal";
+            case 2: return "Detail";
+            case 3: return "Macro";
+            case 4: return "Ambient shadow";
+            case 5: return "Specular";
+            case 6: return "Fresnel";
+            case 7: return "Environment";
+            default: return "Stage";
+        }
+    }
+
+    void openRvmat(const std::string& path) {
+        auto parsed = rvmat::Parser::parseFile(path);
+        if (!parsed) {
+            materialStatus = "Could not read that material";
+            return;
+        }
+
+        material = arma3::RvmatMaterial{};
+        material.ambient = parsed->ambient.toArray();
+        material.diffuse = parsed->diffuse.toArray();
+        material.forcedDiffuse = parsed->forcedDiffuse.toArray();
+        material.emissive = parsed->emissive.toArray();
+        material.specular = parsed->specular.toArray();
+        material.specularPower = parsed->specularPower;
+        if (!parsed->pixelShaderID.empty()) material.pixelShaderID = parsed->pixelShaderID;
+        if (!parsed->vertexShaderID.empty()) material.vertexShaderID = parsed->vertexShaderID;
+
+        for (const auto& [index, stage] : parsed->stages) {
+            arma3::RvmatStage copy;
+            copy.texture = stage.texture;
+            copy.uvSource = stage.uvSource;
+            material.stages[index] = copy;
+        }
+
+        materialPath = path;
+        materialSource.clear();
+        materialStatus = "Opened " + fs::path(path).filename().string();
     }
 
     void applyMaterialToModel() {
@@ -1726,6 +1831,9 @@ private:
     std::string materialSource;
     std::string materialStatus;
     int materialTemplate = 0;
+    std::string materialPath;
+    char pixelFilter[64] = {0};
+    char vertexFilter[64] = {0};
 
     arma3::P3DInfo modelInfo;
     arma3::ModelRenderer renderer;

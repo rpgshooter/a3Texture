@@ -54,6 +54,7 @@ set(HEADERS
     include/job_runner.h
     include/p3d_reader.h
     include/rvmat_writer.h
+    include/rvmat_shaders.h
     include/viewer_3d.h
     include/model_renderer.h
     include/paa_texture.h
