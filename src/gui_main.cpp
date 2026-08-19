@@ -5,6 +5,7 @@
 #include "../include/p3d_reader.h"
 #include "../include/viewer_3d.h"
 #include "../include/model_renderer.h"
+#include "../include/rvmat_writer.h"
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -21,6 +22,7 @@
 #include <atomic>
 #include <mutex>
 #include <algorithm>
+#include <fstream>
 #include <memory>
 #include <map>
 #include <functional>
@@ -295,7 +297,7 @@ public:
         ImGui::SetNextWindowPos(viewport->WorkPos);
         ImGui::SetNextWindowSize(viewport->WorkSize);
 
-        ImGui::Begin("Arma 3 PAA Converter", nullptr,
+        ImGui::Begin("a3Texture", nullptr,
             ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar |
             ImGuiWindowFlags_NoBringToFrontOnFocus);
@@ -319,6 +321,11 @@ public:
             if (ImGui::BeginTabItem("Model")) {
                 activeTab = 3;
                 renderModel();
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("Material")) {
+                activeTab = 4;
+                renderMaterial();
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();
@@ -1396,6 +1403,173 @@ private:
         }
     }
 
+
+    // --------------------------------------------------------------- material
+
+    void rebuildMaterial() {
+        if (materialSource.empty()) return;
+        material = arma3::materialForTextureSet(materialSource, textureRoot);
+        applyMaterialTemplate();
+    }
+
+    void applyMaterialTemplate() {
+        const auto names = arma3::rvmatTemplates();
+        if (materialTemplate < 0 || materialTemplate >= int(names.size())) return;
+
+        const arma3::RvmatMaterial preset = arma3::rvmatTemplate(names[materialTemplate]);
+        material.ambient = preset.ambient;
+        material.diffuse = preset.diffuse;
+        material.forcedDiffuse = preset.forcedDiffuse;
+        material.emissive = preset.emissive;
+        material.specular = preset.specular;
+        material.specularPower = preset.specularPower;
+        material.pixelShaderID = preset.pixelShaderID;
+        material.vertexShaderID = preset.vertexShaderID;
+    }
+
+    void renderMaterial() {
+        ImGui::Spacing();
+        ImGui::TextColored(kDim,
+            "Pick any texture from a set. The maps that exist are wired up, and "
+            "the rest get the placeholders retail materials use.");
+        ImGui::Spacing();
+
+        if (ImGui::Button("Pick a texture...")) {
+            askForFiles("Pick any texture from the set",
+                        {"Textures", "*.paa *.png *.tga *.tif *.tiff", "All files", "*"},
+                        false, [this](std::vector<std::string> files) {
+                if (files.empty()) return;
+                materialSource = files[0];
+                rebuildMaterial();
+            });
+        }
+
+        if (!materialSource.empty()) {
+            ImGui::SameLine();
+            ImGui::TextColored(kDim, "%s",
+                fs::path(materialSource).filename().string().c_str());
+        }
+
+        if (materialSource.empty()) return;
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        ImGui::BeginGroup();
+
+        std::string items;
+        for (const auto& name : arma3::rvmatTemplates()) {
+            items += name;
+            items.push_back('\0');
+        }
+        items.push_back('\0');
+
+        ImGui::SetNextItemWidth(190);
+        if (ImGui::Combo("Starting point", &materialTemplate, items.c_str())) {
+            applyMaterialTemplate();
+        }
+
+        ImGui::Spacing();
+        ImGui::ColorEdit4("Ambient", material.ambient.data(), ImGuiColorEditFlags_Float);
+        ImGui::ColorEdit4("Diffuse", material.diffuse.data(), ImGuiColorEditFlags_Float);
+        ImGui::ColorEdit4("Specular", material.specular.data(), ImGuiColorEditFlags_Float);
+
+        // Emissive runs well past 1 on glowing surfaces, so it is typed rather
+        // than picked.
+        ImGui::SetNextItemWidth(260);
+        ImGui::InputFloat4("Emissive", material.emissive.data());
+        ImGui::SetNextItemWidth(260);
+        ImGui::InputFloat4("Forced diffuse", material.forcedDiffuse.data());
+
+        ImGui::SetNextItemWidth(260);
+        ImGui::DragFloat("Specular power", &material.specularPower, 1.0f, 1.0f, 1000.0f);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Rough 10-50, normal 50-150, shiny 150-500, mirror 500+");
+        }
+
+        char shader[64];
+        snprintf(shader, sizeof(shader), "%s", material.pixelShaderID.c_str());
+        ImGui::SetNextItemWidth(190);
+        if (ImGui::InputText("Pixel shader", shader, sizeof(shader))) {
+            material.pixelShaderID = shader;
+        }
+        snprintf(shader, sizeof(shader), "%s", material.vertexShaderID.c_str());
+        ImGui::SetNextItemWidth(190);
+        if (ImGui::InputText("Vertex shader", shader, sizeof(shader))) {
+            material.vertexShaderID = shader;
+        }
+
+        ImGui::Spacing();
+        ImGui::TextColored(kDim, "Stages");
+        for (auto& [index, stage] : material.stages) {
+            ImGui::PushID(index);
+            char buffer[512];
+            snprintf(buffer, sizeof(buffer), "%s", stage.texture.c_str());
+
+            const bool procedural = !stage.texture.empty() && stage.texture.front() == '#';
+            ImGui::TextColored(procedural ? kDim : kAccent, "Stage%d", index);
+            ImGui::SameLine(90);
+            ImGui::SetNextItemWidth(-10);
+            if (ImGui::InputText("##tex", buffer, sizeof(buffer))) {
+                stage.texture = buffer;
+            }
+            ImGui::PopID();
+        }
+
+        ImGui::Spacing();
+        if (ImGui::Button("Save .rvmat...", ImVec2(150, 32))) {
+            askForSavePath("Save material", {"RVMAT", "*.rvmat"},
+                           [this](std::string file) {
+                if (fs::path(file).extension().empty()) file += ".rvmat";
+                std::ofstream out(file, std::ios::binary);
+                if (out) {
+                    out << arma3::writeRvmat(material);
+                    materialStatus = "Saved " + fs::path(file).filename().string();
+                } else {
+                    materialStatus = "Could not write " + file;
+                }
+            });
+        }
+
+        if (renderer.HasMesh()) {
+            ImGui::SameLine();
+            if (ImGui::Button("Apply to model", ImVec2(150, 32))) applyMaterialToModel();
+        }
+
+        if (!materialStatus.empty()) {
+            ImGui::SameLine();
+            ImGui::TextColored(kOk, "%s", materialStatus.c_str());
+        }
+
+        ImGui::EndGroup();
+
+        ImGui::SameLine();
+        ImGui::BeginGroup();
+        ImGui::TextColored(kDim, "This is what gets written");
+        const std::string text = arma3::writeRvmat(material);
+        ImGui::InputTextMultiline("##preview", const_cast<char*>(text.c_str()), text.size() + 1,
+                                  ImVec2(-1, ImGui::GetContentRegionAvail().y - 10),
+                                  ImGuiInputTextFlags_ReadOnly);
+        ImGui::EndGroup();
+    }
+
+    void applyMaterialToModel() {
+        auto& slots = renderer.GetTextureSlotsMutable();
+        for (auto& slot : slots) {
+            for (int i = 0; i < 4; i++) {
+                slot.material.ambient[i] = material.ambient[i];
+                slot.material.diffuse[i] = material.diffuse[i];
+                slot.material.specular[i] = material.specular[i];
+                slot.material.emissive[i] = material.emissive[i];
+            }
+            slot.material.specularPower = material.specularPower;
+            slot.material.hasRvmat = true;
+        }
+        materialStatus = slots.empty() ? "The model has no textures to apply it to"
+                                       : "Applied to the model";
+    }
+
     // ---------------------------------------------------------------- actions
 
     void addFiles() {
@@ -1548,6 +1722,11 @@ private:
     struct ViewMip { uint32_t width; uint32_t height; std::vector<uint8_t> data; };
     struct ViewTagg { std::string signature; std::vector<uint8_t> data; };
 
+    arma3::RvmatMaterial material;
+    std::string materialSource;
+    std::string materialStatus;
+    int materialTemplate = 0;
+
     arma3::P3DInfo modelInfo;
     arma3::ModelRenderer renderer;
     std::string modelPath;
@@ -1599,7 +1778,7 @@ int main(int, char**) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* window = glfwCreateWindow(940, 760, "Arma 3 PAA Converter",
+    GLFWwindow* window = glfwCreateWindow(1180, 820, "a3Texture",
                                           nullptr, nullptr);
     if (!window) {
         glfwTerminate();
