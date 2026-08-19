@@ -1675,7 +1675,32 @@ private:
         }
 
         if (renderer.HasMesh()) {
-            ImGui::SameLine();
+            ImGui::Spacing();
+
+            // A model can carry a material per section, so say which one this
+            // is being applied to.
+            const auto& slots = renderer.GetTextureSlots();
+            std::string slotItems = "Every section";
+            slotItems.push_back('\0');
+            for (const auto& slot : slots) {
+                slotItems += slot.name.empty()
+                    ? fs::path(slot.path).filename().string()
+                    : slot.name;
+                slotItems.push_back('\0');
+            }
+            slotItems.push_back('\0');
+
+            int choice = materialSlot + 1;
+            ImGui::SetNextItemWidth(300);
+            if (ImGui::Combo("Applies to", &choice, slotItems.c_str())) {
+                materialSlot = choice - 1;
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Sections are the model's textures; each can "
+                                  "carry its own material");
+            }
+
+            ImGui::Spacing();
             if (ImGui::Button("Apply to model", ImVec2(150, 32))) applyMaterialToModel(false);
             ImGui::SameLine();
             ImGui::Checkbox("Live", &materialLive);
@@ -1781,7 +1806,11 @@ private:
     // when the stage actually points somewhere new.
     void applyMaterialToModel(bool quiet) {
         auto& slots = renderer.GetTextureSlotsMutable();
-        for (auto& slot : slots) {
+
+        for (size_t i = 0; i < slots.size(); i++) {
+            // -1 means every section; otherwise only the chosen one changes.
+            if (materialSlot >= 0 && int(i) != materialSlot) continue;
+            auto& slot = slots[i];
             for (int i = 0; i < 4; i++) {
                 slot.material.ambient[i] = material.ambient[i];
                 slot.material.diffuse[i] = material.diffuse[i];
@@ -1980,6 +2009,7 @@ private:
     std::string materialPath;
     bool materialActive = false;
     bool materialLive = true;
+    int materialSlot = -1;   // -1 applies to every section
     std::string appliedNormal;
     std::string appliedSpecular;
     char pixelFilter[64] = {0};

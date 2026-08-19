@@ -100,12 +100,13 @@ uniform int uTextureCount;        // Number of active textures
 uniform int uHasNormalMap;
 uniform int uHasSpecularMap;
 
-// Material properties loaded from RVMAT files
-uniform vec4 uMatAmbient;
-uniform vec4 uMatDiffuse;
-uniform vec4 uMatSpecular;
-uniform vec4 uMatEmissive;
-uniform float uMatSpecularPower;
+// Material properties loaded from RVMAT files, one entry per texture slot so
+// a model carrying several materials shades each section with its own.
+uniform vec4 uMatAmbient[16];
+uniform vec4 uMatDiffuse[16];
+uniform vec4 uMatSpecular[16];
+uniform vec4 uMatEmissive[16];
+uniform float uMatSpecularPower[16];
 
 out vec4 FragColor;
 
@@ -161,16 +162,19 @@ void main() {
         normal = perturbNormal(normal, viewDir, vTexCoord);
     }
 
+    // Untextured faces fall back to the first material.
+    int matIndex = (vTexIndex >= 0 && vTexIndex < 16) ? vTexIndex : 0;
+
     // Lighting using material properties and scene lighting
-    vec3 ambientLight = uMatAmbient.rgb * uAmbientIntensity;
+    vec3 ambientLight = uMatAmbient[matIndex].rgb * uAmbientIntensity;
     float diff = max(dot(normal, lightDir), 0.0);
-    vec3 diffuseLight = uMatDiffuse.rgb * diff * uLightColor * 0.8;
+    vec3 diffuseLight = uMatDiffuse[matIndex].rgb * diff * uLightColor * 0.8;
 
     // Specular using material specular power
     vec3 viewDir = normalize(uViewPos - vWorldPos);
     vec3 halfDir = normalize(lightDir + viewDir);
-    float specPower = uMatSpecularPower;
-    vec3 specColor = uMatSpecular.rgb;
+    float specPower = uMatSpecularPower[matIndex];
+    vec3 specColor = uMatSpecular[matIndex].rgb;
 
     // Apply specular map if available
     // SMDI format: R = specular, G = gloss/micro, B = macro, A = self-illumination/emissive
@@ -237,7 +241,7 @@ void main() {
     // Emissive comes from: RVMAT emissive property + SMDI texture alpha (self-illumination)
     // Boost emissive for more visible glow effect
     float emissiveStrength = textureEmissive * 3.0;  // Amplify SMDI alpha glow
-    vec3 emissiveColor = uMatEmissive.rgb + baseColor.rgb * emissiveStrength;
+    vec3 emissiveColor = uMatEmissive[matIndex].rgb + baseColor.rgb * emissiveStrength;
 
     // Add slight HDR bloom effect for strong emissives
     float emissiveIntensity = max(max(emissiveColor.r, emissiveColor.g), emissiveColor.b);
@@ -1248,13 +1252,33 @@ void ModelRenderer::Render() {
 	glUniform1f(m_LocAmbientIntensity, m_AmbientIntensity);
 	glUniform3f(m_LocViewPos, eyePos[0], eyePos[1], eyePos[2]);
 
-	// Set material properties from active material
-	const MaterialProperties& mat = GetActiveMaterial();
-	glUniform4fv(m_LocMatAmbient, 1, mat.ambient);
-	glUniform4fv(m_LocMatDiffuse, 1, mat.diffuse);
-	glUniform4fv(m_LocMatSpecular, 1, mat.specular);
-	glUniform4fv(m_LocMatEmissive, 1, mat.emissive);
-	glUniform1f(m_LocMatSpecularPower, mat.specularPower);
+	// One material per slot, defaulting anything unset so the array is whole.
+	float ambient[MAX_TEXTURE_SLOTS * 4];
+	float diffuse[MAX_TEXTURE_SLOTS * 4];
+	float specular[MAX_TEXTURE_SLOTS * 4];
+	float emissive[MAX_TEXTURE_SLOTS * 4];
+	float specularPower[MAX_TEXTURE_SLOTS];
+
+	for (int i = 0; i < MAX_TEXTURE_SLOTS; i++) {
+		const MaterialProperties& mat =
+			(i < static_cast<int>(m_TextureSlots.size()) && m_TextureSlots[i].material.hasRvmat)
+				? m_TextureSlots[i].material
+				: m_DefaultMaterial;
+
+		for (int c = 0; c < 4; c++) {
+			ambient[i * 4 + c] = mat.ambient[c];
+			diffuse[i * 4 + c] = mat.diffuse[c];
+			specular[i * 4 + c] = mat.specular[c];
+			emissive[i * 4 + c] = mat.emissive[c];
+		}
+		specularPower[i] = mat.specularPower;
+	}
+
+	glUniform4fv(m_LocMatAmbient, MAX_TEXTURE_SLOTS, ambient);
+	glUniform4fv(m_LocMatDiffuse, MAX_TEXTURE_SLOTS, diffuse);
+	glUniform4fv(m_LocMatSpecular, MAX_TEXTURE_SLOTS, specular);
+	glUniform4fv(m_LocMatEmissive, MAX_TEXTURE_SLOTS, emissive);
+	glUniform1fv(m_LocMatSpecularPower, MAX_TEXTURE_SLOTS, specularPower);
 
 	// Bind all active texture slots to texture units 0-15
 	// Each slot gets its own texture unit for per-vertex texture indexing
