@@ -118,6 +118,14 @@ void ChannelPacker::setSourceChannel(int index, PackChannel channel) {
     }
 }
 
+int ChannelPacker::sourceSlotCount(int index) const {
+    int count = 0;
+    for (const auto& slot : preset.slots) {
+        if (slot.source == index) count++;
+    }
+    return count;
+}
+
 void ChannelPacker::setSourceInvert(int index, bool invert) {
     for (auto& slot : preset.slots) {
         if (slot.source == index) {

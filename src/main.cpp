@@ -2,6 +2,10 @@
 #include "../include/image_loader.h"
 #include "../include/channel_packer.h"
 
+#include <nlohmann/json.hpp>
+#include <fstream>
+#include <algorithm>
+
 #include <iostream>
 #include <string>
 #include <vector>
@@ -45,6 +49,14 @@ void printUsage(const char* programName) {
     std::cout << "  " << programName << " --batch \"*.png\" --output-dir ./paa/\n";
     std::cout << "  " << programName << " pack --preset smdi --source spec.tif"
               << " --source gloss.tif~ hull_smdi.paa\n";
+    std::cout << "  " << programName << " spec material.json\n";
+}
+
+arma3::PackChannel channelFromName(const std::string& name) {
+    if (name == "g") return arma3::PackChannel::G;
+    if (name == "b") return arma3::PackChannel::B;
+    if (name == "a") return arma3::PackChannel::A;
+    return arma3::PackChannel::R;
 }
 
 arma3::Quality parseQuality(const std::string& value) {
@@ -92,6 +104,205 @@ bool parseSlotSpec(const std::string& text, SlotSpec& out) {
 
     out.file = spec;
     return !spec.empty();
+}
+
+
+arma3::PAAFormat parseFormat(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), ::toupper);
+    if (value == "DXT1") return arma3::PAAFormat::DXT1;
+    if (value == "DXT5") return arma3::PAAFormat::DXT5;
+    return arma3::PAAFormat::UNKNOWN;
+}
+
+struct SpecEntry {
+    std::string output;
+    std::string input;
+    std::string presetName;
+    std::vector<std::string> files;
+    std::vector<arma3::PackChannel> channels;
+    std::vector<bool> hasChannel;
+    std::vector<bool> inverts;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    arma3::PAAFormat format = arma3::PAAFormat::UNKNOWN;
+};
+
+int runSpec(int argc, char** argv) {
+    if (argc < 3) {
+        std::cerr << "spec requires a json file\n";
+        return 1;
+    }
+
+    const fs::path specPath(argv[2]);
+    std::ifstream file(specPath);
+    if (!file) {
+        std::cerr << "Cannot open " << specPath << "\n";
+        return 1;
+    }
+
+    nlohmann::json doc;
+    try {
+        file >> doc;
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Invalid JSON in " << specPath.string() << ": " << e.what() << "\n";
+        return 1;
+    }
+
+    // Paths are relative to the spec, so a material folder stays portable.
+    const fs::path base = specPath.has_parent_path() ? specPath.parent_path() : fs::path(".");
+    const auto resolve = [&base](const std::string& value) {
+        const fs::path path(value);
+        return path.is_absolute() ? path : base / path;
+    };
+
+    const arma3::Quality quality =
+        parseQuality(doc.value("quality", std::string("normal")));
+    const fs::path outputDir = resolve(doc.value("outputDir", std::string(".")));
+
+    if (!doc.contains("textures") || !doc["textures"].is_array()) {
+        std::cerr << "Spec needs a \"textures\" array\n";
+        return 1;
+    }
+
+    std::vector<SpecEntry> entries;
+    for (const auto& item : doc["textures"]) {
+        SpecEntry entry;
+        entry.output = item.value("output", std::string());
+        if (entry.output.empty()) {
+            std::cerr << "Every texture needs an \"output\"\n";
+            return 1;
+        }
+
+        entry.input = item.value("input", std::string());
+        entry.presetName = item.value("preset", std::string());
+
+        if (entry.input.empty() == entry.presetName.empty()) {
+            std::cerr << entry.output << ": needs either \"input\" or \"preset\"\n";
+            return 1;
+        }
+
+        if (item.contains("format")) {
+            entry.format = parseFormat(item["format"].get<std::string>());
+        }
+
+        if (item.contains("resolution")) {
+            const std::string value = item["resolution"].get<std::string>();
+            const size_t x = value.find_first_of("xX");
+            if (x != std::string::npos) {
+                entry.width = static_cast<uint32_t>(std::stoul(value.substr(0, x)));
+                entry.height = static_cast<uint32_t>(std::stoul(value.substr(x + 1)));
+            }
+        }
+
+        for (const auto& source : item.value("sources", nlohmann::json::array())) {
+            if (source.is_string()) {
+                entry.files.push_back(source.get<std::string>());
+                entry.channels.push_back(arma3::PackChannel::R);
+                entry.hasChannel.push_back(false);
+                entry.inverts.push_back(false);
+            } else {
+                entry.files.push_back(source.value("file", std::string()));
+                entry.channels.push_back(
+                    channelFromName(source.value("channel", std::string("r"))));
+                entry.hasChannel.push_back(source.contains("channel"));
+                entry.inverts.push_back(source.value("invert", false));
+            }
+        }
+
+        entries.push_back(std::move(entry));
+    }
+
+    std::error_code ec;
+    fs::create_directories(outputDir, ec);
+
+    std::cout << "Spec: " << entries.size() << " texture(s)\n";
+
+    std::atomic<size_t> next{0};
+    std::atomic<int> okCount{0};
+    std::atomic<int> failCount{0};
+    std::mutex outputMutex;
+
+    unsigned workers = doc.value("jobs", 0u);
+    if (workers == 0) workers = std::thread::hardware_concurrency();
+    if (workers == 0) workers = 1;
+    workers = std::min<unsigned>(workers, static_cast<unsigned>(entries.size()));
+
+    const auto start = std::chrono::high_resolution_clock::now();
+
+    auto worker = [&] {
+        for (size_t i = next++; i < entries.size(); i = next++) {
+            const SpecEntry& entry = entries[i];
+            const std::string outPath = (outputDir / entry.output).string();
+
+            try {
+                arma3::PAA paa;
+                paa.setQuality(quality);
+                paa.setThreadCount(1);
+
+                if (!entry.presetName.empty()) {
+                    const arma3::PackPreset* preset =
+                        arma3::ChannelPacker::findPreset(entry.presetName);
+                    if (!preset) {
+                        throw std::runtime_error("unknown preset " + entry.presetName);
+                    }
+                    if (int(entry.files.size()) != preset->sourceCount) {
+                        throw std::runtime_error(
+                            "preset " + entry.presetName + " needs " +
+                            std::to_string(preset->sourceCount) + " source(s)");
+                    }
+
+                    arma3::ChannelPacker packer(*preset);
+                    for (size_t sourceIndex = 0; sourceIndex < entry.files.size(); sourceIndex++) {
+                        packer.setSource(int(sourceIndex),
+                                         arma3::ImageLoader::load(
+                                             resolve(entry.files[sourceIndex]).string()));
+                        if (entry.hasChannel[sourceIndex]) {
+                            packer.setSourceChannel(int(sourceIndex),
+                                                    entry.channels[sourceIndex]);
+                        }
+                        packer.setSourceInvert(int(sourceIndex), entry.inverts[sourceIndex]);
+                    }
+                    if (entry.width && entry.height) {
+                        packer.setTargetSize(entry.width, entry.height);
+                    }
+
+                    paa.setImage(packer.pack());
+                    paa.setSwizzle(preset->swizzle);
+                } else {
+                    paa.loadImage(resolve(entry.input).string());
+                    paa.setSwizzle(arma3::PAA::swizzleFromFilename(entry.output));
+                }
+
+                paa.writePAA(outPath, entry.format);
+
+                std::lock_guard<std::mutex> lock(outputMutex);
+                std::cout << "\u2713 " << entry.output << "\n";
+                okCount++;
+            }
+            catch (const std::exception& e) {
+                std::lock_guard<std::mutex> lock(outputMutex);
+                std::cerr << "\u2717 " << entry.output << " - " << e.what() << "\n";
+                failCount++;
+            }
+        }
+    };
+
+    if (workers <= 1) {
+        worker();
+    } else {
+        std::vector<std::thread> pool;
+        pool.reserve(workers);
+        for (unsigned t = 0; t < workers; t++) pool.emplace_back(worker);
+        for (auto& thread : pool) thread.join();
+    }
+
+    const auto end = std::chrono::high_resolution_clock::now();
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    std::cout << "\n" << okCount.load() << " written, " << failCount.load()
+              << " failed in " << ms.count() << "ms\n";
+    return failCount.load() ? 1 : 0;
 }
 
 int runPack(int argc, char** argv) {
@@ -233,8 +444,10 @@ int runPack(int argc, char** argv) {
         }
 
         arma3::PackChannel channel = arma3::PackChannel::R;
+        bool hasChannel = false;
         const size_t colon = spec.find_last_of(':');
         if (colon != std::string::npos && colon + 2 == spec.size()) {
+            hasChannel = true;
             switch (spec[colon + 1]) {
                 case 'r': channel = arma3::PackChannel::R; break;
                 case 'g': channel = arma3::PackChannel::G; break;
@@ -248,7 +461,9 @@ int runPack(int argc, char** argv) {
         }
 
         packer.setSource(static_cast<int>(i), arma3::ImageLoader::load(spec));
-        packer.setSourceChannel(static_cast<int>(i), channel);
+        if (hasChannel) {
+            packer.setSourceChannel(static_cast<int>(i), channel);
+        }
         packer.setSourceInvert(static_cast<int>(i), invert);
 
         std::cout << "  " << preset->sourceLabels[i] << ": " << spec
@@ -287,16 +502,20 @@ std::string getOutputFilename(const std::string& input, const std::string& outpu
     return outputName;
 }
 
-arma3::PAAFormat parseFormat(const std::string& formatStr) {
-    if (formatStr == "DXT1") return arma3::PAAFormat::DXT1;
-    if (formatStr == "DXT5") return arma3::PAAFormat::DXT5;
-    return arma3::PAAFormat::UNKNOWN;
-}
-
 int main(int argc, char** argv) {
     if (argc < 2) {
         printUsage(argv[0]);
         return 1;
+    }
+
+    if (std::string(argv[1]) == "spec") {
+        try {
+            return runSpec(argc, argv);
+        }
+        catch (const std::exception& e) {
+            std::cerr << "Error: " << e.what() << "\n";
+            return 1;
+        }
     }
 
     if (std::string(argv[1]) == "pack") {

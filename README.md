@@ -8,6 +8,7 @@ High-performance native C++ texture converter for Arma 3's PAA format.
 - **CLI Tool** - Batch conversion from command line
 - **GUI Application** - Dear ImGui interface with drag & drop support
 - **Format Support** - PNG, TGA, JPG, TIFF input formats
+- **Channel Packing** - Builds _nohq/_smdi/_as/_dt from source maps, no Substance packing needed
 - **Auto Mipmap Generation** - Generates all mipmap levels automatically
 - **DXT Compression** - DXT1 (no alpha) and DXT5 (with alpha)
 - **LZO Compression** - Automatic LZO compression for large mipmaps (>128px)
@@ -48,6 +49,7 @@ vcpkg will automatically install all dependencies:
 - LZO (additional compression)
 - stb (image loading)
 - libtiff (TIFF loading)
+- nlohmann-json (spec files)
 - Dear ImGui + GLFW + GLAD (GUI)
 - Boost.GIL (image processing)
 
