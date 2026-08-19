@@ -89,6 +89,20 @@ ChannelPacker::ChannelPacker(const PackPreset& p) : preset(p) {
     sources.resize(p.sourceCount);
 }
 
+ChannelPacker::ChannelPacker()
+    : preset{"custom", SwizzleType::NONE, 0,
+             {nullptr, nullptr, nullptr, nullptr},
+             {kConst(0), kConst(0), kConst(0), kConst(255)}} {}
+
+int ChannelPacker::addSource(const ImageData& image) {
+    sources.push_back(image);
+    return static_cast<int>(sources.size()) - 1;
+}
+
+void ChannelPacker::setSlot(PackChannel output, const ChannelMapping& mapping) {
+    preset.slots[static_cast<int>(output)] = mapping;
+}
+
 void ChannelPacker::setSource(int index, const ImageData& image) {
     if (index < 0 || index >= int(sources.size())) {
         throw std::out_of_range("Source index out of range");
@@ -135,27 +149,33 @@ void ChannelPacker::resolveSize(uint32_t& width, uint32_t& height) const {
         throw std::runtime_error("No sources supplied");
     }
 
+    // Majority wins; ties go to the largest, and only an exact area tie between
+    // different shapes is genuinely ambiguous.
     auto best = counts.begin();
-    bool tied = false;
     for (auto it = std::next(counts.begin()); it != counts.end(); ++it) {
-        if (it->second > best->second) {
+        const size_t area = size_t(it->first.first) * it->first.second;
+        const size_t bestArea = size_t(best->first.first) * best->first.second;
+
+        if (it->second > best->second ||
+            (it->second == best->second && area > bestArea)) {
             best = it;
-            tied = false;
-        } else if (it->second == best->second) {
-            tied = true;
         }
     }
 
-    if (tied) {
-        std::string sizes;
-        for (const auto& entry : counts) {
-            if (!sizes.empty()) sizes += ", ";
-            sizes += std::to_string(entry.first.first) + "x" +
-                     std::to_string(entry.first.second);
+    const size_t bestArea = size_t(best->first.first) * best->first.second;
+    for (const auto& entry : counts) {
+        const size_t area = size_t(entry.first.first) * entry.first.second;
+        if (entry.first != best->first && entry.second == best->second && area == bestArea) {
+            std::string sizes;
+            for (const auto& option : counts) {
+                if (!sizes.empty()) sizes += ", ";
+                sizes += std::to_string(option.first.first) + "x" +
+                         std::to_string(option.first.second);
+            }
+            throw std::runtime_error(
+                "Sources have equally sized but differently shaped resolutions (" +
+                sizes + "). Pick one with --resolution WxH.");
         }
-        throw std::runtime_error(
-            "Sources have no majority resolution (" + sizes +
-            "). Pick one with --resolution WxH.");
     }
 
     width = best->first.first;

@@ -32,6 +32,13 @@ class ChannelPacker {
 public:
     explicit ChannelPacker(const PackPreset& preset);
 
+    // Free-form: slots are set directly and sources added as needed.
+    ChannelPacker();
+
+    int addSource(const ImageData& image);
+    void setSlot(PackChannel output, const ChannelMapping& mapping);
+    void setSwizzle(SwizzleType type) { preset.swizzle = type; }
+
     void setSource(int index, const ImageData& image);
     void setSourceChannel(int index, PackChannel channel);
     void setSourceInvert(int index, bool invert);
