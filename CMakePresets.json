@@ -21,7 +21,7 @@
             "inherits": "base",
             "binaryDir": "${sourceDir}/build/debug",
             "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "debug"
+                "CMAKE_BUILD_TYPE": "Debug"
             }
         },
         {
@@ -30,29 +30,7 @@
             "inherits": "base",
             "binaryDir": "${sourceDir}/build/release",
             "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "release"
-            }
-        },
-        {
-            "name": "windows-debug",
-            "displayName": "windows-debug",
-            "inherits": "base",
-            "binaryDir": "${sourceDir}/build/windows-debug",
-            "condition": {
-                "type": "equals",
-                "lhs": "${hostSystemName}",
-                "rhs": "Windows"
-            }
-        },
-        {
-            "name": "windows-release",
-            "displayName": "windows-release",
-            "inherits": "base",
-            "binaryDir": "${sourceDir}/build/windows-release",
-            "condition": {
-                "type": "equals",
-                "lhs": "${hostSystemName}",
-                "rhs": "Windows"
+                "CMAKE_BUILD_TYPE": "Release"
             }
         }
     ],
@@ -64,16 +42,6 @@
         {
             "name": "release",
             "configurePreset": "release"
-        },
-        {
-            "name": "windows-debug",
-            "configurePreset": "windows-debug",
-            "configuration": "Debug"
-        },
-        {
-            "name": "windows-release",
-            "configurePreset": "windows-release",
-            "configuration": "Release"
         }
     ]
 }
