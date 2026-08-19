@@ -21,6 +21,8 @@
 #include <atomic>
 #include <mutex>
 #include <algorithm>
+#include <memory>
+#include <functional>
 
 namespace fs = std::filesystem;
 
@@ -233,7 +235,61 @@ struct PackSlot {
 
 class PAAConverterApp {
 public:
+    // The dialogs run in a helper process. Waiting on one stops the render
+    // loop, and the compositor then offers to kill the window as hung, so they
+    // are polled instead.
+    void pumpDialogs() {
+        if (pendingFiles && pendingFiles->ready(0)) {
+            auto files = pendingFiles->result();
+            auto handler = onFiles;
+            pendingFiles.reset();
+            onFiles = nullptr;
+            if (handler) handler(files);
+        }
+        if (pendingFolder && pendingFolder->ready(0)) {
+            auto folder = pendingFolder->result();
+            auto handler = onFolder;
+            pendingFolder.reset();
+            onFolder = nullptr;
+            if (handler && !folder.empty()) handler(folder);
+        }
+        if (pendingSave && pendingSave->ready(0)) {
+            auto file = pendingSave->result();
+            auto handler = onSave;
+            pendingSave.reset();
+            onSave = nullptr;
+            if (handler && !file.empty()) handler(file);
+        }
+    }
+
+    bool dialogBusy() const {
+        return pendingFiles || pendingFolder || pendingSave;
+    }
+
+    void askForFiles(const std::string& title, const std::vector<std::string>& filter,
+                     bool multi, std::function<void(std::vector<std::string>)> handler) {
+        if (dialogBusy()) return;
+        pendingFiles = std::make_unique<pfd::open_file>(
+            title, "", filter, multi ? pfd::opt::multiselect : pfd::opt::none);
+        onFiles = std::move(handler);
+    }
+
+    void askForFolder(const std::string& title, std::function<void(std::string)> handler) {
+        if (dialogBusy()) return;
+        pendingFolder = std::make_unique<pfd::select_folder>(title, "");
+        onFolder = std::move(handler);
+    }
+
+    void askForSavePath(const std::string& title, const std::vector<std::string>& filter,
+                        std::function<void(std::string)> handler) {
+        if (dialogBusy()) return;
+        pendingSave = std::make_unique<pfd::save_file>(title, "", filter);
+        onSave = std::move(handler);
+    }
+
     void render() {
+        pumpDialogs();
+
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(viewport->WorkPos);
         ImGui::SetNextWindowSize(viewport->WorkSize);
@@ -369,10 +425,9 @@ private:
                                  outputDir, sizeof(outputDir));
         ImGui::SameLine();
         if (ImGui::Button("Output folder...")) {
-            auto folder = pfd::select_folder("Select output folder", "").result();
-            if (!folder.empty()) {
+            askForFolder("Select output folder", [this](std::string folder) {
                 snprintf(outputDir, sizeof(outputDir), "%s", folder.c_str());
-            }
+            });
         }
 
         ImGui::Spacing();
@@ -638,9 +693,10 @@ private:
 
             ImGui::SameLine();
             if (ImGui::Button("Browse...")) {
-                auto files = pfd::open_file("Select image", "",
-                    {"Images", kImageFilter, "All files", "*"}).result();
-                if (!files.empty()) packSlots[i].path = files[0];
+                askForFiles("Select image", {"Images", kImageFilter, "All files", "*"},
+                            false, [this, i](std::vector<std::string> files) {
+                    if (!files.empty()) packSlots[i].path = files[0];
+                });
             }
 
             ImGui::SameLine();
@@ -673,8 +729,9 @@ private:
                                  sizeof(packOutput));
         ImGui::SameLine();
         if (ImGui::Button("Save as...")) {
-            auto file = pfd::save_file("Save packed texture", "", {"PAA", "*.paa"}).result();
-            if (!file.empty()) snprintf(packOutput, sizeof(packOutput), "%s", file.c_str());
+            askForSavePath("Save packed texture", {"PAA", "*.paa"}, [this](std::string file) {
+                snprintf(packOutput, sizeof(packOutput), "%s", file.c_str());
+            });
         }
 
         ImGui::Spacing();
@@ -916,9 +973,10 @@ private:
         ImGui::Spacing();
 
         if (ImGui::Button("Open .paa...")) {
-            auto files = pfd::open_file("Open PAA", "",
-                {"Arma texture", "*.paa", "All files", "*"}).result();
-            if (!files.empty()) openPaa(files[0]);
+            askForFiles("Open PAA", {"Arma texture", "*.paa", "All files", "*"},
+                        false, [this](std::vector<std::string> files) {
+                if (!files.empty()) openPaa(files[0]);
+            });
         }
 
         if (!viewPath.empty()) {
@@ -1009,10 +1067,13 @@ private:
     void exportViewPng() {
         if (viewLevel < 0 || viewLevel >= int(viewMips.size())) return;
 
-        auto file = pfd::save_file("Export PNG", "", {"PNG", "*.png"}).result();
-        if (file.empty()) return;
-        if (fs::path(file).extension().empty()) file += ".png";
+        askForSavePath("Export PNG", {"PNG", "*.png"}, [this](std::string file) {
+            if (fs::path(file).extension().empty()) file += ".png";
+            writeViewPng(file);
+        });
+    }
 
+    void writeViewPng(const std::string& file) {
         try {
             const auto& mip = viewMips[viewLevel];
             arma3::ImageData image;
@@ -1157,9 +1218,10 @@ private:
         ImGui::Spacing();
 
         if (ImGui::Button("Open .p3d...")) {
-            auto files = pfd::open_file("Open model", "",
-                {"Arma model", "*.p3d", "All files", "*"}).result();
-            if (!files.empty()) openModel(files[0]);
+            askForFiles("Open model", {"Arma model", "*.p3d", "All files", "*"},
+                        false, [this](std::vector<std::string> files) {
+                if (!files.empty()) openModel(files[0]);
+            });
         }
 
         if (!modelPath.empty()) {
@@ -1201,11 +1263,10 @@ private:
         }
         ImGui::SameLine();
         if (ImGui::Button("Browse root...")) {
-            auto folder = pfd::select_folder("Select P drive root", "").result();
-            if (!folder.empty()) {
+            askForFolder("Select P drive root", [this](std::string folder) {
                 snprintf(textureRoot, sizeof(textureRoot), "%s", folder.c_str());
                 uploadModelLod();
-            }
+            });
         }
         ImGui::SameLine();
         if (ImGui::Button("Reload")) uploadModelLod();
@@ -1262,10 +1323,12 @@ private:
     // ---------------------------------------------------------------- actions
 
     void addFiles() {
-        auto files = pfd::open_file("Select images", "",
-            {"Images", kImageFilter, "All files", "*"},
-            pfd::opt::multiselect).result();
-        for (const auto& file : files) inputFiles.push_back(arma3::describeSource(file));
+        askForFiles("Select images", {"Images", kImageFilter, "All files", "*"},
+                    true, [this](std::vector<std::string> files) {
+            for (const auto& file : files) {
+                inputFiles.push_back(arma3::describeSource(file));
+            }
+        });
     }
 
     void startConversion() {
@@ -1373,6 +1436,13 @@ private:
     }
 
     // ------------------------------------------------------------------ state
+
+    std::unique_ptr<pfd::open_file> pendingFiles;
+    std::unique_ptr<pfd::select_folder> pendingFolder;
+    std::unique_ptr<pfd::save_file> pendingSave;
+    std::function<void(std::vector<std::string>)> onFiles;
+    std::function<void(std::string)> onFolder;
+    std::function<void(std::string)> onSave;
 
     int activeTab = 0;
     std::string dropMessage;
