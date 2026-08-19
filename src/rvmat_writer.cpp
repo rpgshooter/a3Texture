@@ -132,6 +132,42 @@ RvmatMaterial rvmatTemplate(const std::string& name) {
     return material;
 }
 
+RvmatMaterial blankMaterial() {
+    RvmatMaterial material = rvmatTemplate("super");
+    material.thermalTexture = "a3\\data_f\\default_vehicle_ti_ca.paa";
+
+    RvmatStage normal;
+    normal.texture = "#(argb,8,8,3)color(0.5,0.5,1,1)";
+    material.stages[1] = normal;
+
+    RvmatStage detail;
+    detail.texture = "#(argb,8,8,3)color(0.5,0.5,0.5,1,DT)";
+    material.stages[2] = detail;
+
+    RvmatStage macro;
+    macro.texture = "#(argb,8,8,3)color(0,0,0,0,MC)";
+    material.stages[3] = macro;
+
+    RvmatStage ambientShadow;
+    ambientShadow.texture = "#(argb,8,8,3)color(1,1,1,1,AS)";
+    material.stages[4] = ambientShadow;
+
+    RvmatStage specular;
+    specular.texture = "#(argb,8,8,3)color(0,0,0,0,SMDI)";
+    material.stages[5] = specular;
+
+    RvmatStage fresnel;
+    fresnel.texture = "#(ai,64,64,1)fresnel(1,0.3)";
+    fresnel.uvSource = "none";
+    material.stages[6] = fresnel;
+
+    RvmatStage environment;
+    environment.texture = "a3\\data_f\\env_co.paa";
+    material.stages[7] = environment;
+
+    return material;
+}
+
 RvmatMaterial materialForTextureSet(const std::string& anyTexturePath,
                                     const std::string& driveRoot) {
     RvmatMaterial material = rvmatTemplate("super");

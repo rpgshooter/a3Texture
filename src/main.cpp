@@ -62,6 +62,7 @@ void printUsage(const char* programName) {
     std::cout << "\nMaterials:\n";
     std::cout << "  " << programName << " rvmat <texture> [-o <out.rvmat>] [--template <name>]\n";
     std::cout << "  --root <dir>            P drive root, so texture paths suit the engine\n";
+    std::cout << "  --blank                 Start from placeholders, with no texture set\n";
     std::cout << "  --group <n>             Group following files into one texture\n";
     std::cout << "  --role <name>           Force the role of following files\n";
 }
@@ -73,15 +74,11 @@ arma3::Quality parseQuality(const std::string& value) {
 }
 
 int runRvmat(int argc, char** argv) {
-    if (argc < 3) {
-        std::cerr << "rvmat needs a texture from the set, e.g. hull_co.paa\n";
-        return 1;
-    }
-
     std::string source;
     std::string output;
     std::string templateName;
     std::string driveRoot;
+    bool blank = false;
 
     for (int i = 2; i < argc; i++) {
         const std::string arg = argv[i];
@@ -91,17 +88,21 @@ int runRvmat(int argc, char** argv) {
             templateName = argv[++i];
         } else if (arg == "--root" && i + 1 < argc) {
             driveRoot = argv[++i];
+        } else if (arg == "--blank") {
+            blank = true;
         } else if (source.empty()) {
             source = arg;
         }
     }
 
-    if (source.empty()) {
-        std::cerr << "rvmat needs a texture from the set\n";
+    if (source.empty() && !blank) {
+        std::cerr << "rvmat needs a texture from the set, or --blank\n";
         return 1;
     }
 
-    arma3::RvmatMaterial material = arma3::materialForTextureSet(source, driveRoot);
+    arma3::RvmatMaterial material = blank
+        ? arma3::blankMaterial()
+        : arma3::materialForTextureSet(source, driveRoot);
 
     if (!templateName.empty()) {
         const arma3::RvmatMaterial preset = arma3::rvmatTemplate(templateName);

@@ -35,6 +35,10 @@ std::string writeRvmat(const RvmatMaterial& material);
 std::vector<std::string> rvmatTemplates();
 RvmatMaterial rvmatTemplate(const std::string& name);
 
+// A Super material with every stage on its placeholder, for starting from
+// nothing rather than from a texture set.
+RvmatMaterial blankMaterial();
+
 // Builds a Super material wired to whichever maps of a set actually exist,
 // falling back to the procedural placeholders retail files use.
 // The engine wants backslashed paths rooted at the P drive, not filesystem

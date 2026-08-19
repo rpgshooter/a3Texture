@@ -1524,17 +1524,27 @@ private:
     void renderMaterial() {
         ImGui::Spacing();
         ImGui::TextColored(kDim,
-            "Pick any texture from a set. The maps that exist are wired up, and "
-            "the rest get the placeholders retail materials use.");
+            "Start empty, build one from a texture set, or open an existing "
+            "material.");
         ImGui::Spacing();
 
-        if (ImGui::Button("New from a texture set...")) {
+        if (ImGui::Button("New material")) {
+            material = arma3::blankMaterial();
+            materialSource.clear();
+            materialPath.clear();
+            materialActive = true;
+            materialStatus = "Every stage on a placeholder; point them at textures as you go";
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("From a texture set...")) {
             askForFiles("Pick any texture from the set",
                         {"Textures", "*.paa *.png *.tga *.tif *.tiff", "All files", "*"},
                         false, [this](std::vector<std::string> files) {
                 if (files.empty()) return;
                 materialSource = files[0];
                 materialPath.clear();
+                materialActive = true;
                 rebuildMaterial();
             });
         }
@@ -1557,7 +1567,7 @@ private:
                 fs::path(materialSource).filename().string().c_str());
         }
 
-        if (materialSource.empty() && materialPath.empty()) return;
+        if (!materialActive) return;
 
         ImGui::Spacing();
         ImGui::Separator();
@@ -1727,6 +1737,7 @@ private:
 
         materialPath = path;
         materialSource.clear();
+        materialActive = true;
         materialStatus = "Opened " + fs::path(path).filename().string();
     }
 
@@ -1903,6 +1914,7 @@ private:
     std::string materialStatus;
     int materialTemplate = 0;
     std::string materialPath;
+    bool materialActive = false;
     char pixelFilter[64] = {0};
     char vertexFilter[64] = {0};
 
