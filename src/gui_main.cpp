@@ -120,6 +120,62 @@ const ImVec4 kOk(0.44f, 0.84f, 0.53f, 1.00f);
 const ImVec4 kBad(0.93f, 0.45f, 0.40f, 1.00f);
 const ImVec4 kDim(0.55f, 0.60f, 0.66f, 1.00f);
 
+struct TexturePreview {
+    GLuint textures[5] = {0, 0, 0, 0, 0};
+    uint32_t width = 0;
+    uint32_t height = 0;
+
+    void release() {
+        for (GLuint& id : textures) {
+            if (id) glDeleteTextures(1, &id);
+            id = 0;
+        }
+        width = height = 0;
+    }
+
+    void build(const std::vector<uint8_t>& rgba, uint32_t w, uint32_t h) {
+        release();
+        if (rgba.size() < size_t(w) * h * 4) return;
+
+        arma3::ImageData full;
+        full.width = w;
+        full.height = h;
+        full.data = rgba;
+
+        const arma3::ImageData small = downscaleTo(full, 1024);
+        width = small.width;
+        height = small.height;
+
+        textures[0] = uploadTexture(small.data.data(), small.width, small.height);
+
+        for (int c = 0; c < 4; c++) {
+            std::vector<uint8_t> grey(small.data.size());
+            for (size_t i = 0; i < grey.size() / 4; i++) {
+                const uint8_t v = small.data[i * 4 + c];
+                grey[i * 4 + 0] = v;
+                grey[i * 4 + 1] = v;
+                grey[i * 4 + 2] = v;
+                grey[i * 4 + 3] = 255;
+            }
+            textures[c + 1] = uploadTexture(grey.data(), small.width, small.height);
+        }
+    }
+
+    bool valid() const { return textures[0] != 0; }
+};
+
+// Draws the channel switcher and the image. Returns the chosen channel.
+inline void drawChannelSwitcher(int& mode) {
+    const char* labels[5] = {"All", "R", "G", "B", "A"};
+    for (int i = 0; i < 5; i++) {
+        if (i) ImGui::SameLine();
+        const bool active = mode == i;
+        if (active) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16f, 0.44f, 0.49f, 1.0f));
+        if (ImGui::Button(labels[i], ImVec2(52, 0))) mode = i;
+        if (active) ImGui::PopStyleColor();
+    }
+}
+
 } // namespace
 
 struct ConversionJob {
@@ -162,6 +218,11 @@ public:
                 renderPack();
                 ImGui::EndTabItem();
             }
+            if (ImGui::BeginTabItem("View PAA")) {
+                activeTab = 2;
+                renderViewer();
+                ImGui::EndTabItem();
+            }
             ImGui::EndTabBar();
         }
 
@@ -173,6 +234,15 @@ public:
         std::vector<std::string> rejected;
 
         for (const auto& file : files) {
+            std::string ext = fs::path(file).extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+            if (ext == ".paa") {
+                accepted++;
+                openPaa(file);
+                continue;
+            }
+
             if (!isSupportedImage(file)) {
                 rejected.push_back(fs::path(file).filename().string());
                 continue;
@@ -210,6 +280,7 @@ public:
             if (id) glDeleteTextures(1, &id);
             id = 0;
         }
+        viewPreview.release();
     }
 
 private:
@@ -749,6 +820,166 @@ private:
         previewMode = 0;
     }
 
+
+    // ----------------------------------------------------------------- viewer
+
+    void openPaa(const std::string& path) {
+        viewError.clear();
+        viewMips.clear();
+        viewTaggs.clear();
+        viewPreview.release();
+        viewLevel = 0;
+
+        try {
+            arma3::PAA paa(path);
+            paa.readPAA();
+
+            viewPath = path;
+            viewFormat = paa.getFormat();
+            viewSwizzle = paa.getSwizzle();
+
+            for (const auto& mip : paa.getMipMaps()) {
+                viewMips.push_back({mip.width, mip.height, mip.data});
+            }
+            for (const auto& tagg : paa.getTaggs()) {
+                viewTaggs.push_back({tagg.signature, tagg.data});
+            }
+
+            if (viewMips.empty()) {
+                viewError = "No mipmaps in file";
+                return;
+            }
+            rebuildViewPreview();
+        }
+        catch (const std::exception& e) {
+            viewError = e.what();
+            viewPath = path;
+        }
+    }
+
+    void rebuildViewPreview() {
+        if (viewLevel < 0 || viewLevel >= int(viewMips.size())) return;
+        const auto& mip = viewMips[viewLevel];
+        viewPreview.build(mip.data, mip.width, mip.height);
+    }
+
+    void renderViewer() {
+        ImGui::Spacing();
+        ImGui::TextColored(kDim, "Open a .paa to inspect it, or drop one on the window.");
+        ImGui::Spacing();
+
+        if (ImGui::Button("Open .paa...")) {
+            auto files = pfd::open_file("Open PAA", "",
+                {"Arma texture", "*.paa", "All files", "*"}).result();
+            if (!files.empty()) openPaa(files[0]);
+        }
+
+        if (!viewPath.empty()) {
+            ImGui::SameLine();
+            ImGui::TextColored(kDim, "%s", fs::path(viewPath).filename().string().c_str());
+        }
+
+        if (!viewError.empty()) {
+            ImGui::Spacing();
+            ImGui::TextColored(kBad, "%s", viewError.c_str());
+            return;
+        }
+
+        if (viewMips.empty()) return;
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        ImGui::SetNextItemWidth(230);
+        if (ImGui::SliderInt("Mip level", &viewLevel, 0, int(viewMips.size()) - 1)) {
+            rebuildViewPreview();
+        }
+        ImGui::SameLine(0, 20);
+        ImGui::TextColored(kDim, "%ux%u of %zu levels",
+                           viewMips[viewLevel].width, viewMips[viewLevel].height,
+                           viewMips.size());
+
+        ImGui::SameLine(0, 20);
+        if (ImGui::Button("Export PNG...")) exportViewPng();
+
+        ImGui::Spacing();
+        drawChannelSwitcher(viewMode);
+        ImGui::Spacing();
+
+        if (viewPreview.valid()) {
+            const float avail = ImGui::GetContentRegionAvail().x;
+            const float side = std::min(430.0f, avail - 300.0f);
+            const float aspect = viewPreview.width
+                ? float(viewPreview.height) / viewPreview.width : 1.0f;
+            ImGui::Image((ImTextureID)(intptr_t)viewPreview.textures[viewMode],
+                         ImVec2(side, side * aspect));
+            ImGui::SameLine();
+        }
+
+        ImGui::BeginGroup();
+        ImGui::TextColored(kAccent, "%s", formatLabel(viewFormat));
+        ImGui::SameLine();
+        if (viewSwizzle == arma3::SwizzleType::NONE) {
+            ImGui::TextColored(kDim, "  no swizzle tagg");
+        } else {
+            ImGui::TextColored(kDim, "  _%s", arma3::PAA::swizzleName(viewSwizzle));
+        }
+
+        ImGui::Spacing();
+        ImGui::TextColored(kDim, "Taggs");
+        for (const auto& tagg : viewTaggs) {
+            std::string label = tagg.signature;
+            std::string detail;
+
+            if (tagg.signature == "GGATCGVA" && tagg.data.size() == 4) {
+                label = "AVGCOLOR";
+                char buffer[64];
+                snprintf(buffer, sizeof(buffer), "b=%u g=%u r=%u a=%u",
+                         tagg.data[0], tagg.data[1], tagg.data[2], tagg.data[3]);
+                detail = buffer;
+            } else if (tagg.signature == "GGATCXAM") {
+                label = "MAXCOLOR";
+            } else if (tagg.signature == "GGATGALF") {
+                label = "FLAGTRANSP";
+            } else if (tagg.signature == "GGATSFFO") {
+                label = "OFFSETS";
+                detail = std::to_string(tagg.data.size() / 4) + " entries";
+            } else if (tagg.signature == "GGATZIWS") {
+                label = "SWIZZLE";
+                char buffer[64] = {0};
+                for (size_t i = 0; i < tagg.data.size() && i < 4; i++) {
+                    snprintf(buffer + i * 3, sizeof(buffer) - i * 3, "%02X ", tagg.data[i]);
+                }
+                detail = buffer;
+            }
+
+            ImGui::TextColored(kDim, "  %-11s %s", label.c_str(), detail.c_str());
+        }
+        ImGui::EndGroup();
+    }
+
+    void exportViewPng() {
+        if (viewLevel < 0 || viewLevel >= int(viewMips.size())) return;
+
+        auto file = pfd::save_file("Export PNG", "", {"PNG", "*.png"}).result();
+        if (file.empty()) return;
+        if (fs::path(file).extension().empty()) file += ".png";
+
+        try {
+            const auto& mip = viewMips[viewLevel];
+            arma3::ImageData image;
+            image.width = mip.width;
+            image.height = mip.height;
+            image.data = mip.data;
+            arma3::ImageLoader::savePNG(file, image);
+            viewError.clear();
+        }
+        catch (const std::exception& e) {
+            viewError = e.what();
+        }
+    }
+
     // ---------------------------------------------------------------- actions
 
     void addFiles() {
@@ -888,6 +1119,19 @@ private:
     int overrideHeight = 2048;
     std::string packStatus;
     bool packFailed = false;
+
+    struct ViewMip { uint32_t width; uint32_t height; std::vector<uint8_t> data; };
+    struct ViewTagg { std::string signature; std::vector<uint8_t> data; };
+
+    std::string viewPath;
+    std::string viewError;
+    std::vector<ViewMip> viewMips;
+    std::vector<ViewTagg> viewTaggs;
+    arma3::PAAFormat viewFormat = arma3::PAAFormat::UNKNOWN;
+    arma3::SwizzleType viewSwizzle = arma3::SwizzleType::NONE;
+    TexturePreview viewPreview;
+    int viewLevel = 0;
+    int viewMode = 0;
 
     GLuint previewTextures[5] = {0, 0, 0, 0, 0};
     int previewMode = 0;
