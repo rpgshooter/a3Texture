@@ -1502,7 +1502,13 @@ private:
         ImGui::Separator();
         ImGui::Spacing();
 
-        ImGui::BeginGroup();
+        // Negative item widths measure against the content region, so the two
+        // columns have to be real children or the editor eats the preview.
+        const float total = ImGui::GetContentRegionAvail().x;
+        const float previewWidth = std::max(340.0f, total * 0.42f);
+        const float editorWidth = std::max(360.0f, total - previewWidth - 12.0f);
+
+        ImGui::BeginChild("materialEditor", ImVec2(editorWidth, 0), false);
 
         std::string items;
         for (const auto& type : arma3::materialTypes()) {
@@ -1524,8 +1530,11 @@ private:
         }
 
         ImGui::Spacing();
+        ImGui::SetNextItemWidth(300);
         ImGui::ColorEdit4("Ambient", material.ambient.data(), ImGuiColorEditFlags_Float);
+        ImGui::SetNextItemWidth(300);
         ImGui::ColorEdit4("Diffuse", material.diffuse.data(), ImGuiColorEditFlags_Float);
+        ImGui::SetNextItemWidth(300);
         ImGui::ColorEdit4("Specular", material.specular.data(), ImGuiColorEditFlags_Float);
 
         // Emissive runs well past 1 on glowing surfaces, so it is typed rather
@@ -1600,20 +1609,21 @@ private:
         }
 
         if (!materialStatus.empty()) {
-            ImGui::SameLine();
+            ImGui::Spacing();
             ImGui::TextColored(kOk, "%s", materialStatus.c_str());
         }
 
-        ImGui::EndGroup();
+        ImGui::EndChild();
 
         ImGui::SameLine();
-        ImGui::BeginGroup();
+
+        ImGui::BeginChild("materialPreview", ImVec2(0, 0), false);
         ImGui::TextColored(kDim, "This is what gets written");
         const std::string text = arma3::writeRvmat(material);
         ImGui::InputTextMultiline("##preview", const_cast<char*>(text.c_str()), text.size() + 1,
-                                  ImVec2(-1, ImGui::GetContentRegionAvail().y - 10),
+                                  ImVec2(-1, ImGui::GetContentRegionAvail().y - 4),
                                   ImGuiInputTextFlags_ReadOnly);
-        ImGui::EndGroup();
+        ImGui::EndChild();
     }
 
     // Stages have fixed meanings, so name them rather than number them.
