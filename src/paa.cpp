@@ -283,19 +283,26 @@ void PAA::calculateMipmapsAndTaggs() {
 
     mipMaps = generatedMips;
 
-    // Calculate average color
+    // 64 bit, since 4096x4096 of pure white already fills a uint32_t.
+    uint64_t sumRed = 0;
+    uint64_t sumGreen = 0;
+    uint64_t sumBlue = 0;
+    uint64_t sumAlpha = 0;
+
     for (size_t i = 0; i < mipMaps[0].data.size(); i += 4) {
-        averageRed += mipMaps[0].data[i];
-        averageGreen += mipMaps[0].data[i + 1];
-        averageBlue += mipMaps[0].data[i + 2];
-        averageAlpha += mipMaps[0].data[i + 3];
+        sumRed += mipMaps[0].data[i];
+        sumGreen += mipMaps[0].data[i + 1];
+        sumBlue += mipMaps[0].data[i + 2];
+        sumAlpha += mipMaps[0].data[i + 3];
     }
 
-    uint32_t pixelCount = mipMaps[0].width * mipMaps[0].height;
-    averageRed /= pixelCount;
-    averageGreen /= pixelCount;
-    averageBlue /= pixelCount;
-    averageAlpha /= pixelCount;
+    const uint64_t pixelCount =
+        uint64_t(mipMaps[0].width) * mipMaps[0].height;
+
+    averageRed = uint32_t(sumRed / pixelCount);
+    averageGreen = uint32_t(sumGreen / pixelCount);
+    averageBlue = uint32_t(sumBlue / pixelCount);
+    averageAlpha = uint32_t(sumAlpha / pixelCount);
 
     // Create tags
     taggs.clear();
