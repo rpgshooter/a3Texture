@@ -87,6 +87,37 @@ arma3::ImageData downscaleTo(const arma3::ImageData& src, uint32_t maxSide) {
     return out;
 }
 
+// One palette, with every widget colour derived from it, so changing the
+// accent is one edit rather than twenty.
+struct Theme {
+    ImVec4 background{0.09f, 0.10f, 0.12f, 1.00f};
+    ImVec4 surface   {0.15f, 0.17f, 0.20f, 1.00f};
+    ImVec4 accent    {0.40f, 0.82f, 0.88f, 1.00f};
+    ImVec4 text      {0.88f, 0.90f, 0.93f, 1.00f};
+    ImVec4 muted     {0.55f, 0.60f, 0.66f, 1.00f};
+    ImVec4 good      {0.44f, 0.84f, 0.53f, 1.00f};
+    ImVec4 bad       {0.93f, 0.45f, 0.40f, 1.00f};
+};
+
+const Theme& theme() {
+    static const Theme instance;
+    return instance;
+}
+
+ImVec4 mix(const ImVec4& from, const ImVec4& to, float amount) {
+    return ImVec4(from.x + (to.x - from.x) * amount,
+                  from.y + (to.y - from.y) * amount,
+                  from.z + (to.z - from.z) * amount,
+                  from.w + (to.w - from.w) * amount);
+}
+
+// Positive lifts toward white, negative sinks toward the background.
+ImVec4 shade(const ImVec4& colour, float amount) {
+    const ImVec4 white(1.0f, 1.0f, 1.0f, colour.w);
+    return amount >= 0.0f ? mix(colour, white, amount)
+                          : mix(colour, theme().background, -amount);
+}
+
 void applyStyle() {
     ImGuiStyle& style = ImGui::GetStyle();
     style.WindowPadding = ImVec2(16, 14);
@@ -100,33 +131,68 @@ void applyStyle() {
     style.WindowBorderSize = 0.0f;
     style.FrameBorderSize = 1.0f;
 
+    const Theme& t = theme();
+
+    // The accent reads as text at full strength and as a surface when sunk
+    // most of the way into the background.
+    const ImVec4 accentFill = shade(t.accent, -0.62f);
+    const ImVec4 accentPressed = shade(t.accent, -0.50f);
+
     ImVec4* c = style.Colors;
-    c[ImGuiCol_WindowBg]        = ImVec4(0.09f, 0.10f, 0.12f, 1.00f);
-    c[ImGuiCol_ChildBg]         = ImVec4(0.11f, 0.13f, 0.15f, 1.00f);
-    c[ImGuiCol_FrameBg]         = ImVec4(0.15f, 0.17f, 0.20f, 1.00f);
-    c[ImGuiCol_FrameBgHovered]  = ImVec4(0.19f, 0.22f, 0.26f, 1.00f);
-    c[ImGuiCol_FrameBgActive]   = ImVec4(0.22f, 0.26f, 0.30f, 1.00f);
-    c[ImGuiCol_Border]          = ImVec4(0.22f, 0.25f, 0.29f, 1.00f);
-    c[ImGuiCol_Button]          = ImVec4(0.18f, 0.21f, 0.25f, 1.00f);
-    c[ImGuiCol_ButtonHovered]   = ImVec4(0.24f, 0.29f, 0.34f, 1.00f);
-    c[ImGuiCol_ButtonActive]    = ImVec4(0.11f, 0.45f, 0.50f, 1.00f);
-    c[ImGuiCol_Header]          = ImVec4(0.13f, 0.36f, 0.40f, 1.00f);
-    c[ImGuiCol_HeaderHovered]   = ImVec4(0.16f, 0.44f, 0.49f, 1.00f);
-    c[ImGuiCol_HeaderActive]    = ImVec4(0.18f, 0.50f, 0.56f, 1.00f);
-    c[ImGuiCol_Tab]             = ImVec4(0.13f, 0.15f, 0.18f, 1.00f);
-    c[ImGuiCol_TabHovered]      = ImVec4(0.20f, 0.45f, 0.50f, 1.00f);
-    c[ImGuiCol_TabActive]       = ImVec4(0.16f, 0.38f, 0.43f, 1.00f);
-    c[ImGuiCol_TitleBgActive]   = ImVec4(0.12f, 0.14f, 0.17f, 1.00f);
-    c[ImGuiCol_CheckMark]       = ImVec4(0.40f, 0.82f, 0.88f, 1.00f);
-    c[ImGuiCol_SliderGrab]      = ImVec4(0.30f, 0.68f, 0.75f, 1.00f);
-    c[ImGuiCol_PlotHistogram]   = ImVec4(0.25f, 0.70f, 0.76f, 1.00f);
-    c[ImGuiCol_TableHeaderBg]   = ImVec4(0.14f, 0.16f, 0.19f, 1.00f);
-    c[ImGuiCol_TableBorderLight]= ImVec4(0.20f, 0.23f, 0.27f, 1.00f);
-    c[ImGuiCol_TableBorderStrong]=ImVec4(0.25f, 0.28f, 0.33f, 1.00f);
+    c[ImGuiCol_Text]                 = t.text;
+    c[ImGuiCol_TextDisabled]         = t.muted;
+
+    c[ImGuiCol_WindowBg]             = t.background;
+    c[ImGuiCol_ChildBg]              = shade(t.background, 0.03f);
+    c[ImGuiCol_PopupBg]              = shade(t.background, 0.02f);
+    c[ImGuiCol_Border]               = shade(t.surface, 0.08f);
+
+    c[ImGuiCol_FrameBg]              = t.surface;
+    c[ImGuiCol_FrameBgHovered]       = shade(t.surface, 0.05f);
+    c[ImGuiCol_FrameBgActive]        = shade(t.surface, 0.09f);
+
+    c[ImGuiCol_Button]               = shade(t.surface, 0.03f);
+    c[ImGuiCol_ButtonHovered]        = shade(t.surface, 0.10f);
+    c[ImGuiCol_ButtonActive]         = accentPressed;
+
+    c[ImGuiCol_Header]               = accentFill;
+    c[ImGuiCol_HeaderHovered]        = shade(accentFill, 0.06f);
+    c[ImGuiCol_HeaderActive]         = shade(accentFill, 0.12f);
+
+    c[ImGuiCol_Tab]                  = shade(t.background, 0.05f);
+    c[ImGuiCol_TabHovered]           = shade(accentFill, 0.10f);
+    c[ImGuiCol_TabActive]            = accentFill;
+    c[ImGuiCol_TabUnfocused]         = shade(t.background, 0.03f);
+    c[ImGuiCol_TabUnfocusedActive]   = shade(accentFill, -0.30f);
+
+    c[ImGuiCol_TitleBg]              = t.background;
+    c[ImGuiCol_TitleBgActive]        = shade(t.background, 0.04f);
+
+    c[ImGuiCol_CheckMark]            = t.accent;
+    c[ImGuiCol_SliderGrab]           = shade(t.accent, -0.25f);
+    c[ImGuiCol_SliderGrabActive]     = t.accent;
+
+    c[ImGuiCol_ScrollbarBg]          = t.background;
+    c[ImGuiCol_ScrollbarGrab]        = shade(t.surface, 0.08f);
+    c[ImGuiCol_ScrollbarGrabHovered] = shade(t.surface, 0.16f);
+    c[ImGuiCol_ScrollbarGrabActive]  = accentPressed;
+
+    c[ImGuiCol_Separator]            = shade(t.surface, 0.06f);
+    c[ImGuiCol_PlotHistogram]        = shade(t.accent, -0.20f);
+    c[ImGuiCol_PlotLines]            = shade(t.accent, -0.20f);
+
+    c[ImGuiCol_TableHeaderBg]        = shade(t.background, 0.05f);
+    c[ImGuiCol_TableBorderLight]     = shade(t.surface, 0.05f);
+    c[ImGuiCol_TableBorderStrong]    = shade(t.surface, 0.12f);
+    c[ImGuiCol_TableRowBgAlt]        = shade(t.background, 0.02f);
 }
 
-// Model texture references look like a3\\characters_f\\...\\body_co.tga: a P drive
-// path, backslashed, and naming the source art rather than the shipped .paa.
+// Named for meaning rather than colour, all taken from the palette.
+const ImVec4 kAccent = theme().accent;
+const ImVec4 kOk = theme().good;
+const ImVec4 kBad = theme().bad;
+const ImVec4 kDim = theme().muted;
+
 inline std::string resolveModelTexture(const std::string& reference,
                                        const std::string& modelDir,
                                        const std::string& driveRoot) {
@@ -157,11 +223,6 @@ inline std::string resolveModelTexture(const std::string& reference,
     }
     return {};
 }
-
-const ImVec4 kAccent(0.40f, 0.82f, 0.88f, 1.00f);
-const ImVec4 kOk(0.44f, 0.84f, 0.53f, 1.00f);
-const ImVec4 kBad(0.93f, 0.45f, 0.40f, 1.00f);
-const ImVec4 kDim(0.55f, 0.60f, 0.66f, 1.00f);
 
 struct TexturePreview {
     GLuint textures[5] = {0, 0, 0, 0, 0};
@@ -829,7 +890,7 @@ private:
         for (int i = 0; i < 5; i++) {
             if (i) ImGui::SameLine();
             const bool active = previewMode == i;
-            if (active) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16f, 0.44f, 0.49f, 1.0f));
+            if (active) ImGui::PushStyleColor(ImGuiCol_Button, shade(theme().accent, -0.62f));
             if (ImGui::Button(labels[i], ImVec2(52, 0))) previewMode = i;
             if (active) ImGui::PopStyleColor();
         }
