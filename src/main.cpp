@@ -2,6 +2,7 @@
 #include "../include/image_loader.h"
 #include "../include/channel_packer.h"
 #include "../include/texture_role.h"
+#include "../include/job_runner.h"
 
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -125,64 +126,20 @@ int runPlan(int argc, char** argv, bool execute) {
         return 0;
     }
 
-    if (!outputDir.empty()) {
-        std::error_code ec;
-        fs::create_directories(outputDir, ec);
-    }
-
     std::cout << "\n";
 
-    std::atomic<size_t> next{0};
-    std::atomic<int> okCount{0};
-    std::atomic<int> failCount{0};
-    std::mutex outputMutex;
+    arma3::JobOptions options;
+    options.outputDir = outputDir;
+    options.quality = quality;
 
-    unsigned workers = std::max(1u, std::thread::hardware_concurrency());
-    workers = std::min<unsigned>(workers, static_cast<unsigned>(outputs.size()));
+    const auto counts = arma3::runJobs(outputs, options, [](const arma3::JobResult& r) {
+        if (r.success) std::cout << "\u2713 " << r.name << "\n";
+        else std::cerr << "\u2717 " << r.name << " - " << r.error << "\n";
+    });
 
-    auto worker = [&] {
-        for (size_t i = next++; i < outputs.size(); i = next++) {
-            const auto& plan = outputs[i];
-            const std::string path = outputDir.empty()
-                ? plan.name
-                : (fs::path(outputDir) / plan.name).string();
-
-            try {
-                arma3::ChannelPacker packer;
-                packer.setThreadCount(1);
-                for (const auto& file : plan.sources) {
-                    packer.addSource(arma3::ImageLoader::load(file));
-                }
-                for (int c = 0; c < 4; c++) {
-                    packer.setSlot(static_cast<arma3::PackChannel>(c), plan.slots[c]);
-                }
-
-                arma3::PAA paa;
-                paa.setQuality(quality);
-                paa.setThreadCount(1);
-                paa.setImage(packer.pack());
-                paa.setSwizzle(plan.swizzle);
-                paa.writePAA(path);
-
-                std::lock_guard<std::mutex> lock(outputMutex);
-                std::cout << "\u2713 " << plan.name << "\n";
-                okCount++;
-            }
-            catch (const std::exception& e) {
-                std::lock_guard<std::mutex> lock(outputMutex);
-                std::cerr << "\u2717 " << plan.name << " - " << e.what() << "\n";
-                failCount++;
-            }
-        }
-    };
-
-    std::vector<std::thread> pool;
-    pool.reserve(workers);
-    for (unsigned t = 0; t < workers; t++) pool.emplace_back(worker);
-    for (auto& thread : pool) thread.join();
-
-    std::cout << "\n" << okCount.load() << " written, " << failCount.load() << " failed\n";
-    return failCount.load() ? 1 : 0;
+    std::cout << "\n" << counts.first << " written, " << counts.second
+              << " failed\n";
+    return counts.second ? 1 : 0;
 }
 
 arma3::PackChannel channelFromName(const std::string& name) {
@@ -340,96 +297,68 @@ int runSpec(int argc, char** argv) {
         entries.push_back(std::move(entry));
     }
 
-    std::error_code ec;
-    fs::create_directories(outputDir, ec);
+    std::vector<arma3::PlannedOutput> jobs;
+    for (const auto& entry : entries) {
+        arma3::PlannedOutput job;
+        job.name = entry.output;
+        job.format = entry.format;
+        job.width = entry.width;
+        job.height = entry.height;
 
-    std::cout << "Spec: " << entries.size() << " texture(s)\n";
+        if (!entry.presetName.empty()) {
+            const arma3::PackPreset* preset =
+                arma3::ChannelPacker::findPreset(entry.presetName);
+            if (!preset) {
+                std::cerr << entry.output << ": unknown preset " << entry.presetName << "\n";
+                return 1;
+            }
+            if (int(entry.files.size()) != preset->sourceCount) {
+                std::cerr << entry.output << ": preset " << entry.presetName << " needs "
+                          << preset->sourceCount << " source(s)\n";
+                return 1;
+            }
 
-    std::atomic<size_t> next{0};
-    std::atomic<int> okCount{0};
-    std::atomic<int> failCount{0};
-    std::mutex outputMutex;
+            job.swizzle = preset->swizzle;
+            for (int c = 0; c < 4; c++) job.slots[c] = preset->slots[c];
 
-    unsigned workers = doc.value("jobs", 0u);
-    if (workers == 0) workers = std::thread::hardware_concurrency();
-    if (workers == 0) workers = 1;
-    workers = std::min<unsigned>(workers, static_cast<unsigned>(entries.size()));
-
-    const auto start = std::chrono::high_resolution_clock::now();
-
-    auto worker = [&] {
-        for (size_t i = next++; i < entries.size(); i = next++) {
-            const SpecEntry& entry = entries[i];
-            const std::string outPath = (outputDir / entry.output).string();
-
-            try {
-                arma3::PAA paa;
-                paa.setQuality(quality);
-                paa.setThreadCount(1);
-
-                if (!entry.presetName.empty()) {
-                    const arma3::PackPreset* preset =
-                        arma3::ChannelPacker::findPreset(entry.presetName);
-                    if (!preset) {
-                        throw std::runtime_error("unknown preset " + entry.presetName);
-                    }
-                    if (int(entry.files.size()) != preset->sourceCount) {
-                        throw std::runtime_error(
-                            "preset " + entry.presetName + " needs " +
-                            std::to_string(preset->sourceCount) + " source(s)");
-                    }
-
-                    arma3::ChannelPacker packer(*preset);
-                    for (size_t sourceIndex = 0; sourceIndex < entry.files.size(); sourceIndex++) {
-                        packer.setSource(int(sourceIndex),
-                                         arma3::ImageLoader::load(
-                                             resolve(entry.files[sourceIndex]).string()));
-                        if (entry.hasChannel[sourceIndex]) {
-                            packer.setSourceChannel(int(sourceIndex),
-                                                    entry.channels[sourceIndex]);
-                        }
-                        packer.setSourceInvert(int(sourceIndex), entry.inverts[sourceIndex]);
-                    }
-                    if (entry.width && entry.height) {
-                        packer.setTargetSize(entry.width, entry.height);
-                    }
-
-                    paa.setImage(packer.pack());
-                    paa.setSwizzle(preset->swizzle);
-                } else {
-                    paa.loadImage(resolve(entry.input).string());
-                    paa.setSwizzle(arma3::PAA::swizzleFromFilename(entry.output));
+            for (size_t i = 0; i < entry.files.size(); i++) {
+                job.sources.push_back(resolve(entry.files[i]).string());
+                for (auto& slot : job.slots) {
+                    if (slot.source != int(i)) continue;
+                    if (entry.hasChannel[i]) slot.channel = entry.channels[i];
+                    if (entry.inverts[i]) slot.invert = true;
                 }
-
-                paa.writePAA(outPath, entry.format);
-
-                std::lock_guard<std::mutex> lock(outputMutex);
-                std::cout << "\u2713 " << entry.output << "\n";
-                okCount++;
             }
-            catch (const std::exception& e) {
-                std::lock_guard<std::mutex> lock(outputMutex);
-                std::cerr << "\u2717 " << entry.output << " - " << e.what() << "\n";
-                failCount++;
-            }
+        } else {
+            job.swizzle = arma3::PAA::swizzleFromFilename(entry.output);
+            job.sources.push_back(resolve(entry.input).string());
+            job.slots[0] = {0, arma3::PackChannel::R, 0, false};
+            job.slots[1] = {0, arma3::PackChannel::G, 0, false};
+            job.slots[2] = {0, arma3::PackChannel::B, 0, false};
+            job.slots[3] = {0, arma3::PackChannel::A, 0, false};
         }
-    };
 
-    if (workers <= 1) {
-        worker();
-    } else {
-        std::vector<std::thread> pool;
-        pool.reserve(workers);
-        for (unsigned t = 0; t < workers; t++) pool.emplace_back(worker);
-        for (auto& thread : pool) thread.join();
+        jobs.push_back(std::move(job));
     }
 
+    std::cout << "Spec: " << jobs.size() << " texture(s)\n";
+
+    arma3::JobOptions options;
+    options.outputDir = outputDir.string();
+    options.quality = quality;
+    options.jobs = doc.value("jobs", 0u);
+
+    const auto start = std::chrono::high_resolution_clock::now();
+    const auto counts = arma3::runJobs(jobs, options, [](const arma3::JobResult& r) {
+        if (r.success) std::cout << "\u2713 " << r.name << "\n";
+        else std::cerr << "\u2717 " << r.name << " - " << r.error << "\n";
+    });
     const auto end = std::chrono::high_resolution_clock::now();
     const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
-    std::cout << "\n" << okCount.load() << " written, " << failCount.load()
+    std::cout << "\n" << counts.first << " written, " << counts.second
               << " failed in " << ms.count() << "ms\n";
-    return failCount.load() ? 1 : 0;
+    return counts.second ? 1 : 0;
 }
 
 int runPack(int argc, char** argv) {
@@ -499,54 +428,54 @@ int runPack(int argc, char** argv) {
         return 1;
     }
     if (freeForm) {
-        arma3::ChannelPacker packer;
+        arma3::ChannelMapping freeSlots[4];
+        std::vector<std::string> ordered;
         std::map<std::string, int> loaded;
 
         for (int c = 0; c < 4; c++) {
             const SlotSpec& spec = slots[c];
             const auto channel = static_cast<arma3::PackChannel>(c);
 
+            (void)channel;
+
             if (!spec.set) {
-                packer.setSlot(channel, arma3::ChannelMapping{-1, arma3::PackChannel::R,
-                                                              uint8_t(c == 3 ? 255 : 0), false});
+                freeSlots[c] = {-1, arma3::PackChannel::R, uint8_t(c == 3 ? 255 : 0), false};
                 continue;
             }
 
             if (spec.constant) {
-                packer.setSlot(channel, arma3::ChannelMapping{-1, arma3::PackChannel::R,
-                                                              spec.value, spec.invert});
+                freeSlots[c] = {-1, arma3::PackChannel::R, spec.value, spec.invert};
                 continue;
             }
 
             auto it = loaded.find(spec.file);
             if (it == loaded.end()) {
-                it = loaded.emplace(spec.file,
-                                    packer.addSource(arma3::ImageLoader::load(spec.file))).first;
+                ordered.push_back(spec.file);
+                it = loaded.emplace(spec.file, int(ordered.size()) - 1).first;
             }
-            packer.setSlot(channel, arma3::ChannelMapping{it->second, spec.channel,
-                                                          0, spec.invert});
+            freeSlots[c] = {it->second, spec.channel, 0, spec.invert};
         }
 
-        if (width && height) {
-            packer.setTargetSize(width, height);
+        arma3::PlannedOutput job;
+        job.name = fs::path(output).filename().string();
+        job.swizzle = arma3::PAA::swizzleFromFilename(output);
+        job.width = width;
+        job.height = height;
+        if (!applySwizzle) job.mode = arma3::SwizzleMode::TagOnly;
+
+        for (const auto& file : ordered) job.sources.push_back(file);
+        for (int c = 0; c < 4; c++) job.slots[c] = freeSlots[c];
+
+        arma3::JobOptions options;
+        options.quality = quality;
+        options.outputDir = fs::path(output).parent_path().string();
+
+        const arma3::JobResult result = arma3::runJob(job, options);
+        if (!result.success) {
+            std::cerr << "Error: " << result.error << "\n";
+            return 1;
         }
-
-        const arma3::SwizzleType swizzle = arma3::PAA::swizzleFromFilename(output);
-
-        auto start = std::chrono::high_resolution_clock::now();
-
-        arma3::PAA paa;
-        paa.setQuality(quality);
-        paa.setImage(packer.pack());
-        paa.setSwizzle(swizzle);
-        if (!applySwizzle) {
-            paa.setSwizzleMode(arma3::SwizzleMode::TagOnly);
-        }
-        paa.writePAA(output);
-
-        auto end = std::chrono::high_resolution_clock::now();
-        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-        std::cout << "\u2713 Packed " << output << " (" << ms.count() << "ms)\n";
+        std::cout << "\u2713 Packed " << output << " (" << result.durationMs << "ms)\n";
         return 0;
     }
 

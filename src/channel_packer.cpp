@@ -31,7 +31,8 @@ const PackPreset kPresets[] = {
     {
         "as", SwizzleType::AS, 1,
         {"Ambient occlusion", nullptr, nullptr, nullptr},
-        {kConst(0), kFrom(0, PackChannel::R), kConst(0), kConst(255)}
+        {kFrom(0, PackChannel::R), kFrom(0, PackChannel::R),
+         kFrom(0, PackChannel::R), kConst(255)}
     },
     {
         "dt", SwizzleType::DT, 1,

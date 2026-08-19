@@ -36,12 +36,17 @@ struct SourceFile {
     SwizzleType armaType = SwizzleType::NONE;  // when role is ArmaMap
 };
 
+// Also the unit of work every entry point ends up producing.
 struct PlannedOutput {
     std::string name;                  // e.g. hull_smdi.paa
     SwizzleType swizzle = SwizzleType::NONE;
     std::vector<std::string> sources;  // files, in slot order
     ChannelMapping slots[4];
     std::string note;                  // shown when something is assumed
+    PAAFormat format = PAAFormat::UNKNOWN;
+    SwizzleMode mode = SwizzleMode::Apply;
+    uint32_t width = 0;                // 0 resolves from the sources
+    uint32_t height = 0;
 };
 
 // Fills in role, baseName and invert from the filename.
