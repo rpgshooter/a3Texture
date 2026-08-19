@@ -1,5 +1,7 @@
 #pragma once
 
+#include "image_loader.h"
+
 #include <vector>
 #include <string>
 #include <cstdint>
@@ -71,6 +73,9 @@ public:
 
     // Load image from file (PNG, TGA, etc.)
     void loadImage(const std::string& filename);
+
+    // Load already-decoded pixels, e.g. from ChannelPacker
+    void setImage(const ImageData& image);
 
     // Write PAA file
     void writePAA(const std::string& filename, PAAFormat format = PAAFormat::UNKNOWN);

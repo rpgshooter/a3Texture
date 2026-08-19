@@ -27,11 +27,13 @@ set(SOURCES
     src/main.cpp
     src/paa.cpp
     src/image_loader.cpp
+    src/channel_packer.cpp
 )
 
 set(HEADERS
     include/paa.h
     include/image_loader.h
+    include/channel_packer.h
     include/utils.h
 )
 
@@ -56,6 +58,7 @@ set(GUI_SOURCES
     src/gui_main.cpp
     src/paa.cpp
     src/image_loader.cpp
+    src/channel_packer.cpp
 )
 
 add_executable(arma3-paa-gui ${GUI_SOURCES})
