@@ -116,11 +116,10 @@ SourceFile describeSource(const std::string& path) {
     std::string stem = fs::path(path).stem().string();
     const std::string key = lowered(stem);
 
+    // A trailing token is the reliable case and also tells us the base name.
     for (const auto& token : kTokens) {
         const size_t at = key.rfind(token.text);
         if (at == std::string::npos) continue;
-
-        // Only match a trailing token, so hull_normal_old is not a normal map.
         if (at + std::strlen(token.text) != key.size()) continue;
 
         source.role = token.role;
@@ -128,30 +127,52 @@ SourceFile describeSource(const std::string& path) {
         source.invert = token.invert;
         source.baseName = stem.substr(0, at);
         trimSeparators(source.baseName);
+
+        if (source.baseName.empty()) source.baseName = stem;
+        return source;
+    }
+
+    // Otherwise take a token from anywhere, which catches names like
+    // metal_v2. The base name is unreliable then, so grouping falls to the
+    // whole stem and the user can override it.
+    for (const auto& token : kTokens) {
+        if (token.role == TextureRole::ArmaMap) continue;
+        if (key.find(token.text) == std::string::npos) continue;
+
+        source.role = token.role;
+        source.invert = token.invert;
         break;
     }
 
-    if (source.baseName.empty()) {
-        source.baseName = stem;
-    }
+    source.baseName = stem;
     return source;
 }
 
 std::vector<PlannedOutput> planOutputs(const std::vector<SourceFile>& sources) {
     std::vector<std::string> order;
     std::map<std::string, std::vector<const SourceFile*>> groups;
+    std::map<std::string, std::string> baseFor;
 
     for (const auto& source : sources) {
         if (source.role == TextureRole::Ignore) continue;
-        if (!groups.count(source.baseName)) order.push_back(source.baseName);
-        groups[source.baseName].push_back(&source);
+
+        // A number groups files that do not share a name; otherwise the name does.
+        const std::string key = source.group > 0
+            ? "#" + std::to_string(source.group)
+            : source.baseName;
+
+        if (!groups.count(key)) {
+            order.push_back(key);
+            baseFor[key] = source.baseName;
+        }
+        groups[key].push_back(&source);
     }
 
     std::vector<PlannedOutput> outputs;
 
-    for (const auto& rawBase : order) {
-        const auto& group = groups[rawBase];
-        const std::string base = lowered(rawBase);
+    for (const auto& key : order) {
+        const auto& group = groups[key];
+        const std::string base = lowered(baseFor[key]);
 
         for (const auto* source : group) {
             if (source->role != TextureRole::ArmaMap) continue;

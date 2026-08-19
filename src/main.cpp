@@ -54,6 +54,8 @@ void printUsage(const char* programName) {
     std::cout << "\nWhole material:\n";
     std::cout << "  " << programName << " plan <files...>            Show what would be produced\n";
     std::cout << "  " << programName << " auto <files...> [--output-dir <dir>]\n";
+    std::cout << "  --group <n>             Group following files into one texture\n";
+    std::cout << "  --role <name>           Force the role of following files\n";
 }
 
 arma3::Quality parseQuality(const std::string& value) {
@@ -65,6 +67,9 @@ arma3::Quality parseQuality(const std::string& value) {
 int runPlan(int argc, char** argv, bool execute) {
     std::vector<arma3::SourceFile> sources;
     std::string outputDir;
+    int currentGroup = 0;
+    arma3::TextureRole currentRole = arma3::TextureRole::Ignore;
+    bool roleSet = false;
     arma3::Quality quality = arma3::Quality::Normal;
 
     for (int i = 2; i < argc; i++) {
@@ -73,8 +78,16 @@ int runPlan(int argc, char** argv, bool execute) {
             outputDir = argv[++i];
         } else if (arg == "--quality" && i + 1 < argc) {
             quality = parseQuality(argv[++i]);
+        } else if (arg == "--group" && i + 1 < argc) {
+            currentGroup = std::stoi(argv[++i]);
+        } else if (arg == "--role" && i + 1 < argc) {
+            currentRole = arma3::roleFromName(argv[++i]);
+            roleSet = true;
         } else {
-            sources.push_back(arma3::describeSource(arg));
+            arma3::SourceFile source = arma3::describeSource(arg);
+            source.group = currentGroup;
+            if (roleSet) source.role = currentRole;
+            sources.push_back(source);
         }
     }
 

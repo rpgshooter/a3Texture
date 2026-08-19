@@ -291,12 +291,13 @@ private:
         const auto options = arma3::roleOptions();
 
         ImGui::BeginChild("queue", ImVec2(0, 190), true);
-        if (ImGui::BeginTable("files", 4,
+        if (ImGui::BeginTable("files", 5,
                 ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
                 ImGuiTableFlags_SizingStretchProp)) {
             ImGui::TableSetupColumn("File", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("What it is", ImGuiTableColumnFlags_WidthFixed, 190);
-            ImGui::TableSetupColumn("Invert", ImGuiTableColumnFlags_WidthFixed, 60);
+            ImGui::TableSetupColumn("Invert", ImGuiTableColumnFlags_WidthFixed, 55);
+            ImGui::TableSetupColumn("Group", ImGuiTableColumnFlags_WidthFixed, 80);
             ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 30);
             ImGui::TableHeadersRow();
 
@@ -337,6 +338,21 @@ private:
                     ImGui::TextColored(kDim, " -");
                 } else {
                     ImGui::Checkbox("##inv", &inputFiles[i].invert);
+                }
+
+                ImGui::TableNextColumn();
+                if (inputFiles[i].role == arma3::TextureRole::Ignore) {
+                    ImGui::TextColored(kDim, " -");
+                } else {
+                    ImGui::SetNextItemWidth(-1);
+                    ImGui::InputInt("##grp", &inputFiles[i].group, 0);
+                    if (inputFiles[i].group < 0) inputFiles[i].group = 0;
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip(
+                            "0 groups by filename.\n"
+                            "Give rows the same number to pack them together\n"
+                            "when their names do not match.");
+                    }
                 }
 
                 ImGui::TableNextColumn();
