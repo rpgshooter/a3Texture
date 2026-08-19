@@ -319,6 +319,22 @@ void PAA::calculateMipmapsAndTaggs() {
     hasTransparency = (averageAlpha != 255);
 }
 
+const char* PAA::swizzleName(SwizzleType type) {
+    switch (type) {
+        case SwizzleType::NOHQ: return "nohq";
+        case SwizzleType::SMDI: return "smdi";
+        case SwizzleType::AS:   return "as";
+        case SwizzleType::DT:   return "dt";
+        case SwizzleType::NONE: break;
+    }
+    return "none";
+}
+
+PAAFormat PAA::swizzleFormat(SwizzleType type) {
+    const SwizzlePreset* preset = swizzlePreset(type);
+    return preset ? preset->format : PAAFormat::UNKNOWN;
+}
+
 SwizzleType PAA::swizzleFromFilename(const std::string& filename) {
     std::string stem = filename;
     const size_t slash = stem.find_last_of("/\\");
@@ -392,16 +408,8 @@ void PAA::writePAA(const std::string& filename, PAAFormat targetFormat) {
     // Copy mipmaps for encoding
     std::vector<MipMap> encodedMips = mipMaps;
 
-    if (preset && swizzleMode == SwizzleMode::Apply) {
-        std::vector<uint8_t> transform = preset->bytes;
-
-        // BIS authored _dt detail in the source alpha, but exporters put a
-        // greyscale in RGB. Read red instead when alpha carries nothing; the
-        // stored result is the same either way.
-        if (swizzle == SwizzleType::DT && !hasTransparency) {
-            transform = {0x08, 0x01, 0x01, 0x01};
-        }
-
+    const std::vector<uint8_t> transform = swizzleTransformBytes();
+    if (!transform.empty()) {
         for (auto& mip : encodedMips) {
             applySwizzle(mip, transform, threadCount);
         }
@@ -586,6 +594,37 @@ void PAA::decompressLZO(MipMap& mipmap) {
     mipmap.data = std::move(decompressed);
     mipmap.dataLength = decompressedLen;
     mipmap.lzoCompressed = false;
+}
+
+std::vector<uint8_t> PAA::swizzleTransformBytes() const {
+    const SwizzlePreset* preset = swizzlePreset(swizzle);
+    if (!preset || swizzleMode != SwizzleMode::Apply) {
+        return {};
+    }
+
+    // BIS authored _dt detail in the source alpha, but exporters put a
+    // greyscale in RGB. Read red instead when alpha carries nothing; the
+    // stored result is the same either way.
+    if (swizzle == SwizzleType::DT && !hasTransparency) {
+        return {0x08, 0x01, 0x01, 0x01};
+    }
+
+    return preset->bytes;
+}
+
+std::vector<uint8_t> PAA::getPackedPixelData(uint8_t level) const {
+    if (level >= mipMaps.size()) {
+        return {};
+    }
+
+    const std::vector<uint8_t> transform = swizzleTransformBytes();
+    if (transform.empty()) {
+        return mipMaps[level].data;
+    }
+
+    MipMap copy = mipMaps[level];
+    applySwizzle(copy, transform, threadCount);
+    return copy.data;
 }
 
 std::vector<uint8_t> PAA::getRawPixelData(uint8_t level) {
