@@ -29,12 +29,14 @@ set(SOURCES
     src/paa.cpp
     src/image_loader.cpp
     src/channel_packer.cpp
+    src/texture_role.cpp
 )
 
 set(HEADERS
     include/paa.h
     include/image_loader.h
     include/channel_packer.h
+    include/texture_role.h
     include/utils.h
 )
 
@@ -61,6 +63,7 @@ set(GUI_SOURCES
     src/paa.cpp
     src/image_loader.cpp
     src/channel_packer.cpp
+    src/texture_role.cpp
 )
 
 add_executable(arma3-paa-gui ${GUI_SOURCES})

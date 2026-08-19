@@ -1,6 +1,7 @@
 #include "../include/paa.h"
 #include "../include/image_loader.h"
 #include "../include/channel_packer.h"
+#include "../include/texture_role.h"
 
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -50,6 +51,125 @@ void printUsage(const char* programName) {
     std::cout << "  " << programName << " pack --preset smdi --source spec.tif"
               << " --source gloss.tif~ hull_smdi.paa\n";
     std::cout << "  " << programName << " spec material.json\n";
+    std::cout << "\nWhole material:\n";
+    std::cout << "  " << programName << " plan <files...>            Show what would be produced\n";
+    std::cout << "  " << programName << " auto <files...> [--output-dir <dir>]\n";
+}
+
+arma3::Quality parseQuality(const std::string& value) {
+    if (value == "fast") return arma3::Quality::Fast;
+    if (value == "high") return arma3::Quality::High;
+    return arma3::Quality::Normal;
+}
+
+int runPlan(int argc, char** argv, bool execute) {
+    std::vector<arma3::SourceFile> sources;
+    std::string outputDir;
+    arma3::Quality quality = arma3::Quality::Normal;
+
+    for (int i = 2; i < argc; i++) {
+        const std::string arg = argv[i];
+        if (arg == "--output-dir" && i + 1 < argc) {
+            outputDir = argv[++i];
+        } else if (arg == "--quality" && i + 1 < argc) {
+            quality = parseQuality(argv[++i]);
+        } else {
+            sources.push_back(arma3::describeSource(arg));
+        }
+    }
+
+    if (sources.empty()) {
+        std::cerr << "Give it some image files\n";
+        return 1;
+    }
+
+    std::cout << "Inputs:\n";
+    for (const auto& source : sources) {
+        std::cout << "  " << fs::path(source.path).filename().string()
+                  << "  ->  " << arma3::roleLabel(source.role);
+        if (source.invert) std::cout << " (inverted)";
+        std::cout << "\n";
+    }
+
+    const auto outputs = arma3::planOutputs(sources);
+    if (outputs.empty()) {
+        std::cout << "\nNothing to write.\n";
+        return 0;
+    }
+
+    std::cout << "\nOutputs:\n";
+    for (const auto& output : outputs) {
+        std::cout << "  " << output.name;
+        if (!output.note.empty()) std::cout << "   (" << output.note << ")";
+        std::cout << "\n";
+        for (const auto& file : output.sources) {
+            std::cout << "        <- " << fs::path(file).filename().string() << "\n";
+        }
+    }
+
+    if (!execute) {
+        std::cout << "\nDry run. Use 'auto' to write these.\n";
+        return 0;
+    }
+
+    if (!outputDir.empty()) {
+        std::error_code ec;
+        fs::create_directories(outputDir, ec);
+    }
+
+    std::cout << "\n";
+
+    std::atomic<size_t> next{0};
+    std::atomic<int> okCount{0};
+    std::atomic<int> failCount{0};
+    std::mutex outputMutex;
+
+    unsigned workers = std::max(1u, std::thread::hardware_concurrency());
+    workers = std::min<unsigned>(workers, static_cast<unsigned>(outputs.size()));
+
+    auto worker = [&] {
+        for (size_t i = next++; i < outputs.size(); i = next++) {
+            const auto& plan = outputs[i];
+            const std::string path = outputDir.empty()
+                ? plan.name
+                : (fs::path(outputDir) / plan.name).string();
+
+            try {
+                arma3::ChannelPacker packer;
+                packer.setThreadCount(1);
+                for (const auto& file : plan.sources) {
+                    packer.addSource(arma3::ImageLoader::load(file));
+                }
+                for (int c = 0; c < 4; c++) {
+                    packer.setSlot(static_cast<arma3::PackChannel>(c), plan.slots[c]);
+                }
+
+                arma3::PAA paa;
+                paa.setQuality(quality);
+                paa.setThreadCount(1);
+                paa.setImage(packer.pack());
+                paa.setSwizzle(plan.swizzle);
+                paa.writePAA(path);
+
+                std::lock_guard<std::mutex> lock(outputMutex);
+                std::cout << "\u2713 " << plan.name << "\n";
+                okCount++;
+            }
+            catch (const std::exception& e) {
+                std::lock_guard<std::mutex> lock(outputMutex);
+                std::cerr << "\u2717 " << plan.name << " - " << e.what() << "\n";
+                failCount++;
+            }
+        }
+    };
+
+    std::vector<std::thread> pool;
+    pool.reserve(workers);
+    for (unsigned t = 0; t < workers; t++) pool.emplace_back(worker);
+    for (auto& thread : pool) thread.join();
+
+    std::cout << "\n" << okCount.load() << " written, " << failCount.load() << " failed\n";
+    return failCount.load() ? 1 : 0;
 }
 
 arma3::PackChannel channelFromName(const std::string& name) {
@@ -57,12 +177,6 @@ arma3::PackChannel channelFromName(const std::string& name) {
     if (name == "b") return arma3::PackChannel::B;
     if (name == "a") return arma3::PackChannel::A;
     return arma3::PackChannel::R;
-}
-
-arma3::Quality parseQuality(const std::string& value) {
-    if (value == "fast") return arma3::Quality::Fast;
-    if (value == "high") return arma3::Quality::High;
-    return arma3::Quality::Normal;
 }
 
 struct SlotSpec {
@@ -506,6 +620,16 @@ int main(int argc, char** argv) {
     if (argc < 2) {
         printUsage(argv[0]);
         return 1;
+    }
+
+    if (std::string(argv[1]) == "plan" || std::string(argv[1]) == "auto") {
+        try {
+            return runPlan(argc, argv, std::string(argv[1]) == "auto");
+        }
+        catch (const std::exception& e) {
+            std::cerr << "Error: " << e.what() << "\n";
+            return 1;
+        }
     }
 
     if (std::string(argv[1]) == "spec") {

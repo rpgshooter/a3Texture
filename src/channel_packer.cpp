@@ -19,8 +19,8 @@ constexpr ChannelMapping kFrom(int source, PackChannel channel) {
 const PackPreset kPresets[] = {
     {
         "smdi", SwizzleType::SMDI, 2,
-        {"Specular level", "Specular power (gloss)", nullptr, nullptr},
-        {kConst(0), kFrom(0, PackChannel::R), kFrom(1, PackChannel::R), kConst(255)}
+        {"Metallic / specular", "Roughness", nullptr, nullptr},
+        {kConst(255), kFrom(0, PackChannel::R), kFrom(1, PackChannel::R), kConst(255)}
     },
     {
         "nohq", SwizzleType::NOHQ, 1,

@@ -1,6 +1,7 @@
 #include "../include/paa.h"
 #include "../include/image_loader.h"
 #include "../include/channel_packer.h"
+#include "../include/texture_role.h"
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -122,8 +123,7 @@ const ImVec4 kDim(0.55f, 0.60f, 0.66f, 1.00f);
 } // namespace
 
 struct ConversionJob {
-    std::string inputPath;
-    std::string outputPath;
+    std::string name;
     arma3::SwizzleType swizzle = arma3::SwizzleType::NONE;
     bool completed = false;
     bool success = false;
@@ -181,7 +181,7 @@ public:
                     }
                 }
             } else {
-                inputFiles.push_back(file);
+                inputFiles.push_back(arma3::describeSource(file));
             }
         }
     }
@@ -236,7 +236,7 @@ private:
         ImGui::Spacing();
 
         const bool busy = converting.load();
-        const bool canConvert = !busy && !inputFiles.empty();
+        const bool canConvert = !busy && !arma3::planOutputs(inputFiles).empty();
 
         if (!canConvert) ImGui::BeginDisabled();
         if (ImGui::Button(busy ? "Converting..." : "Convert", ImVec2(160, 38))) {
@@ -257,20 +257,22 @@ private:
 
     void renderQueue() {
         if (inputFiles.empty()) {
-            ImGui::BeginChild("empty", ImVec2(0, 120), true);
+            ImGui::BeginChild("empty", ImVec2(0, 110), true);
             ImGui::Spacing();
             ImGui::TextColored(kDim, "   Nothing queued yet.");
             ImGui::EndChild();
             return;
         }
 
-        ImGui::BeginChild("queue", ImVec2(0, 160), true);
+        const auto options = arma3::roleOptions();
+
+        ImGui::BeginChild("queue", ImVec2(0, 190), true);
         if (ImGui::BeginTable("files", 4,
                 ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
                 ImGuiTableFlags_SizingStretchProp)) {
             ImGui::TableSetupColumn("File", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 90);
-            ImGui::TableSetupColumn("Format", ImGuiTableColumnFlags_WidthFixed, 70);
+            ImGui::TableSetupColumn("What it is", ImGuiTableColumnFlags_WidthFixed, 190);
+            ImGui::TableSetupColumn("Invert", ImGuiTableColumnFlags_WidthFixed, 60);
             ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 30);
             ImGui::TableHeadersRow();
 
@@ -279,27 +281,39 @@ private:
                 ImGui::TableNextRow();
                 ImGui::PushID(int(i));
 
-                const std::string name = fs::path(inputFiles[i]).filename().string();
-                const auto swizzle = arma3::PAA::swizzleFromFilename(inputFiles[i]);
-
                 ImGui::TableNextColumn();
-                ImGui::TextUnformatted(name.c_str());
+                ImGui::TextUnformatted(
+                    fs::path(inputFiles[i].path).filename().string().c_str());
                 if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("%s", inputFiles[i].c_str());
+                    ImGui::SetTooltip("%s", inputFiles[i].path.c_str());
                 }
 
                 ImGui::TableNextColumn();
-                if (swizzle == arma3::SwizzleType::NONE) {
-                    ImGui::TextColored(kDim, "plain");
+                int current = 0;
+                for (size_t option = 0; option < options.size(); option++) {
+                    if (options[option].role == inputFiles[i].role) current = int(option);
+                }
+
+                std::string items;
+                for (const auto& option : options) {
+                    items += option.label;
+                    items.push_back('\0');
+                }
+                items.push_back('\0');
+
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::Combo("##role", &current, items.c_str())) {
+                    inputFiles[i].role = options[current].role;
+                }
+
+                ImGui::TableNextColumn();
+                const bool packed = inputFiles[i].role == arma3::TextureRole::ArmaMap ||
+                                    inputFiles[i].role == arma3::TextureRole::Ignore;
+                if (packed) {
+                    ImGui::TextColored(kDim, " -");
                 } else {
-                    ImGui::TextColored(kAccent, "_%s", arma3::PAA::swizzleName(swizzle));
+                    ImGui::Checkbox("##inv", &inputFiles[i].invert);
                 }
-
-                ImGui::TableNextColumn();
-                ImGui::TextColored(kDim, "%s",
-                    formatLabel(selectedFormat == 1 ? arma3::PAAFormat::DXT1 :
-                                selectedFormat == 2 ? arma3::PAAFormat::DXT5 :
-                                arma3::PAA::swizzleFormat(swizzle)));
 
                 ImGui::TableNextColumn();
                 if (ImGui::SmallButton("x")) removeIndex = int(i);
@@ -307,10 +321,40 @@ private:
                 ImGui::PopID();
             }
 
-            if (removeIndex >= 0) {
-                inputFiles.erase(inputFiles.begin() + removeIndex);
-            }
+            if (removeIndex >= 0) inputFiles.erase(inputFiles.begin() + removeIndex);
             ImGui::EndTable();
+        }
+        ImGui::EndChild();
+
+        renderPlan();
+    }
+
+    void renderPlan() {
+        const auto outputs = arma3::planOutputs(inputFiles);
+
+        ImGui::Spacing();
+        if (outputs.empty()) {
+            ImGui::TextColored(kDim, "Nothing to write yet.");
+            return;
+        }
+
+        ImGui::TextColored(kAccent, "Will write %zu texture%s", outputs.size(),
+                           outputs.size() == 1 ? "" : "s");
+
+        ImGui::BeginChild("plan", ImVec2(0, 130), true);
+        for (const auto& output : outputs) {
+            ImGui::TextColored(kAccent, "%s", output.name.c_str());
+            ImGui::SameLine();
+            ImGui::TextColored(kDim, "  %s",
+                formatLabel(arma3::PAA::swizzleFormat(output.swizzle)));
+            if (!output.note.empty()) {
+                ImGui::SameLine();
+                ImGui::TextColored(kBad, "  %s", output.note.c_str());
+            }
+            for (const auto& source : output.sources) {
+                ImGui::TextColored(kDim, "        %s",
+                                   fs::path(source).filename().string().c_str());
+            }
         }
         ImGui::EndChild();
     }
@@ -353,7 +397,7 @@ private:
                 ImGui::TableNextRow();
 
                 ImGui::TableNextColumn();
-                ImGui::TextUnformatted(fs::path(job.inputPath).filename().string().c_str());
+                ImGui::TextUnformatted(job.name.c_str());
 
                 ImGui::TableNextColumn();
                 ImGui::TextColored(kDim, "%ux%u", job.width, job.height);
@@ -612,8 +656,8 @@ private:
                 sources[2] = "normal Z"; sources[3] = "normal X, inverted";
                 break;
             case arma3::SwizzleType::SMDI:
-                sources[0] = "255"; sources[1] = "specular level";
-                sources[2] = "specular power"; sources[3] = "255";
+                sources[0] = "255"; sources[1] = "metallic / specular";
+                sources[2] = "roughness"; sources[3] = "255";
                 break;
             case arma3::SwizzleType::AS:
                 sources[0] = "255"; sources[1] = "ambient occlusion";
@@ -671,22 +715,20 @@ private:
         auto files = pfd::open_file("Select images", "",
             {"Images", kImageFilter, "All files", "*"},
             pfd::opt::multiselect).result();
-        for (const auto& file : files) inputFiles.push_back(file);
+        for (const auto& file : files) inputFiles.push_back(arma3::describeSource(file));
     }
 
     void startConversion() {
+        const auto outputs = arma3::planOutputs(inputFiles);
+        if (outputs.empty()) return;
+
         {
             std::lock_guard<std::mutex> lock(jobsMutex);
             jobs.clear();
-            for (const auto& input : inputFiles) {
+            for (const auto& output : outputs) {
                 ConversionJob job;
-                job.inputPath = input;
-                job.swizzle = arma3::PAA::swizzleFromFilename(input);
-
-                const std::string dir = outputDir[0] ? outputDir
-                                                     : fs::path(input).parent_path().string();
-                job.outputPath =
-                    (fs::path(dir) / (fs::path(input).stem().string() + ".paa")).string();
+                job.name = output.name;
+                job.swizzle = output.swizzle;
                 jobs.push_back(job);
             }
         }
@@ -694,30 +736,21 @@ private:
         successCount = 0;
         failCount = 0;
         completedJobs = 0;
-        totalJobs = int(inputFiles.size());
+        totalJobs = int(outputs.size());
         converting = true;
 
         const int formatChoice = selectedFormat;
         const int qualityChoice = selectedQuality;
+        const std::string dir = outputDir;
 
-        std::thread([this, formatChoice, qualityChoice] {
+        std::thread([this, outputs, formatChoice, qualityChoice, dir] {
             std::atomic<size_t> next{0};
             unsigned workers = std::max(1u, std::thread::hardware_concurrency());
-            {
-                std::lock_guard<std::mutex> lock(jobsMutex);
-                workers = std::min<unsigned>(workers, unsigned(jobs.size()));
-            }
+            workers = std::min<unsigned>(workers, unsigned(outputs.size()));
 
             auto worker = [&] {
-                for (;;) {
-                    size_t index = next++;
-
-                    ConversionJob local;
-                    {
-                        std::lock_guard<std::mutex> lock(jobsMutex);
-                        if (index >= jobs.size()) return;
-                        local = jobs[index];
-                    }
+                for (size_t index = next++; index < outputs.size(); index = next++) {
+                    const arma3::PlannedOutput& plan = outputs[index];
 
                     bool ok = true;
                     std::string error;
@@ -728,20 +761,32 @@ private:
                     try {
                         const auto start = std::chrono::high_resolution_clock::now();
 
+                        arma3::ChannelPacker packer;
+                        for (const auto& file : plan.sources) {
+                            packer.addSource(arma3::ImageLoader::load(file));
+                        }
+                        for (int c = 0; c < 4; c++) {
+                            packer.setSlot(static_cast<arma3::PackChannel>(c), plan.slots[c]);
+                        }
+
+                        arma3::ImageData packed = packer.pack();
+                        width = packed.width;
+                        height = packed.height;
+
                         arma3::PAA paa;
                         paa.setQuality(static_cast<arma3::Quality>(qualityChoice));
                         paa.setThreadCount(1);
-                        paa.loadImage(local.inputPath);
-                        paa.setSwizzle(local.swizzle);
-
-                        width = paa.getMipMaps()[0].width;
-                        height = paa.getMipMaps()[0].height;
+                        paa.setImage(packed);
+                        paa.setSwizzle(plan.swizzle);
 
                         arma3::PAAFormat format = arma3::PAAFormat::UNKNOWN;
                         if (formatChoice == 1) format = arma3::PAAFormat::DXT1;
                         else if (formatChoice == 2) format = arma3::PAAFormat::DXT5;
 
-                        paa.writePAA(local.outputPath, format);
+                        const std::string base = dir.empty()
+                            ? fs::path(plan.sources.front()).parent_path().string()
+                            : dir;
+                        paa.writePAA((fs::path(base) / plan.name).string(), format);
 
                         const auto end = std::chrono::high_resolution_clock::now();
                         ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -780,7 +825,7 @@ private:
     // ------------------------------------------------------------------ state
 
     int activeTab = 0;
-    std::vector<std::string> inputFiles;
+    std::vector<arma3::SourceFile> inputFiles;
     char outputDir[512] = {0};
     int selectedFormat = 0;
     int selectedQuality = 1;

@@ -46,6 +46,7 @@ public:
     int sourceSlotCount(int index) const;
     void setSourceInvert(int index, bool invert);
     void setTargetSize(uint32_t width, uint32_t height);
+    void setThreadCount(unsigned) {}   // reserved; packing is already cheap
 
     SwizzleType getSwizzle() const { return preset.swizzle; }
     int getSourceCount() const { return preset.sourceCount; }
