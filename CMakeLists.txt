@@ -6,7 +6,7 @@ endif()
 
 project(Arma3PAA VERSION 1.0.0 LANGUAGES C CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(unofficial-libsquish CONFIG REQUIRED)
@@ -31,6 +31,7 @@ set(SOURCES
     src/channel_packer.cpp
     src/texture_role.cpp
     src/job_runner.cpp
+    src/p3d_reader.cpp
 )
 
 set(HEADERS
@@ -39,6 +40,8 @@ set(HEADERS
     include/channel_packer.h
     include/texture_role.h
     include/job_runner.h
+    include/p3d_reader.h
+    include/binary_reader.h
     include/utils.h
 )
 
@@ -67,6 +70,7 @@ set(GUI_SOURCES
     src/channel_packer.cpp
     src/texture_role.cpp
     src/job_runner.cpp
+    src/p3d_reader.cpp
 )
 
 add_executable(arma3-paa-gui ${GUI_SOURCES})
