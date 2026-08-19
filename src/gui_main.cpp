@@ -181,22 +181,22 @@ struct TexturePreview {
         full.height = h;
         full.data = rgba;
 
-        const arma3::ImageData small = downscaleTo(full, 1024);
-        width = small.width;
-        height = small.height;
+        const arma3::ImageData scaled = downscaleTo(full, 1024);
+        width = scaled.width;
+        height = scaled.height;
 
-        textures[0] = uploadTexture(small.data.data(), small.width, small.height);
+        textures[0] = uploadTexture(scaled.data.data(), scaled.width, scaled.height);
 
         for (int c = 0; c < 4; c++) {
-            std::vector<uint8_t> grey(small.data.size());
+            std::vector<uint8_t> grey(scaled.data.size());
             for (size_t i = 0; i < grey.size() / 4; i++) {
-                const uint8_t v = small.data[i * 4 + c];
+                const uint8_t v = scaled.data[i * 4 + c];
                 grey[i * 4 + 0] = v;
                 grey[i * 4 + 1] = v;
                 grey[i * 4 + 2] = v;
                 grey[i * 4 + 3] = 255;
             }
-            textures[c + 1] = uploadTexture(grey.data(), small.width, small.height);
+            textures[c + 1] = uploadTexture(grey.data(), scaled.width, scaled.height);
         }
     }
 
@@ -901,22 +901,22 @@ private:
         full.height = height;
         full.data = rgba;
 
-        const arma3::ImageData small = downscaleTo(full, 512);
-        previewWidth = small.width;
-        previewHeight = small.height;
+        const arma3::ImageData scaled = downscaleTo(full, 512);
+        previewWidth = scaled.width;
+        previewHeight = scaled.height;
 
-        previewTextures[0] = uploadTexture(small.data.data(), small.width, small.height);
+        previewTextures[0] = uploadTexture(scaled.data.data(), scaled.width, scaled.height);
 
         for (int c = 0; c < 4; c++) {
-            std::vector<uint8_t> grey(small.data.size());
+            std::vector<uint8_t> grey(scaled.data.size());
             for (size_t i = 0; i < grey.size() / 4; i++) {
-                const uint8_t v = small.data[i * 4 + c];
+                const uint8_t v = scaled.data[i * 4 + c];
                 grey[i * 4 + 0] = v;
                 grey[i * 4 + 1] = v;
                 grey[i * 4 + 2] = v;
                 grey[i * 4 + 3] = 255;
             }
-            previewTextures[c + 1] = uploadTexture(grey.data(), small.width, small.height);
+            previewTextures[c + 1] = uploadTexture(grey.data(), scaled.width, scaled.height);
         }
     }
 
