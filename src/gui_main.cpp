@@ -169,8 +169,15 @@ public:
     }
 
     void handleFileDrop(const std::vector<std::string>& files) {
+        int accepted = 0;
+        std::vector<std::string> rejected;
+
         for (const auto& file : files) {
-            if (!isSupportedImage(file)) continue;
+            if (!isSupportedImage(file)) {
+                rejected.push_back(fs::path(file).filename().string());
+                continue;
+            }
+            accepted++;
 
             if (activeTab == 1) {
                 const arma3::PackPreset* preset = currentPreset();
@@ -183,6 +190,18 @@ public:
             } else {
                 inputFiles.push_back(arma3::describeSource(file));
             }
+        }
+
+        dropMessage.clear();
+        dropRejected = false;
+
+        if (!rejected.empty()) {
+            dropRejected = true;
+            dropMessage = "Ignored " + std::to_string(rejected.size()) +
+                          " file(s) that are not images: " + rejected.front();
+            if (rejected.size() > 1) dropMessage += ", ...";
+        } else if (accepted) {
+            dropMessage = "Added " + std::to_string(accepted) + " file(s)";
         }
     }
 
@@ -199,7 +218,12 @@ private:
     void renderConvert() {
         ImGui::Spacing();
         ImGui::TextColored(kDim,
-            "Drop images here, or add them below. PNG, TGA, JPG and TIFF.");
+            "Drop images anywhere on this window, or add them below. "
+            "PNG, TGA, JPG and TIFF.");
+        if (!dropMessage.empty()) {
+            ImGui::SameLine();
+            ImGui::TextColored(dropRejected ? kBad : kOk, "  %s", dropMessage.c_str());
+        }
         ImGui::Spacing();
 
         if (ImGui::Button("Add files...")) addFiles();
@@ -825,6 +849,8 @@ private:
     // ------------------------------------------------------------------ state
 
     int activeTab = 0;
+    std::string dropMessage;
+    bool dropRejected = false;
     std::vector<arma3::SourceFile> inputFiles;
     char outputDir[512] = {0};
     int selectedFormat = 0;
