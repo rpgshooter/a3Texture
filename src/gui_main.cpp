@@ -22,6 +22,7 @@
 #include <mutex>
 #include <algorithm>
 #include <memory>
+#include <map>
 #include <functional>
 
 namespace fs = std::filesystem;
@@ -1170,11 +1171,38 @@ private:
         renderer.FrameObject();
     }
 
+    // The renderer only takes PAA, so an override in any other format is put
+    // through this project's own conversion first. That also shows what the
+    // conversion actually produces, on the model.
+    std::string paaForPreview(const std::string& source) {
+        std::string ext = fs::path(source).extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        if (ext == ".paa") return source;
+
+        try {
+            const std::string stem = fs::path(source).stem().string();
+            const fs::path temp = fs::temp_directory_path() /
+                ("a3paa_preview_" + std::to_string(std::hash<std::string>{}(source)) +
+                 "_" + stem + ".paa");
+
+            arma3::PAA paa;
+            paa.setQuality(arma3::Quality::Fast);
+            paa.setImage(arma3::ImageLoader::load(source));
+            paa.setSwizzle(arma3::PAA::swizzleFromFilename(source));
+            paa.writePAA(temp.string());
+            return temp.string();
+        }
+        catch (const std::exception&) {
+            return {};
+        }
+    }
+
     // Adds a slot per referenced texture and repoints the mesh at the slots
     // that actually loaded, since a failed one is not added at all.
     void loadModelTextures(const std::map<std::string, int>& textureMap, arma3::Mesh& mesh) {
         renderer.ClearTextureSlots();
         missingTextures.clear();
+        textureRefs.clear();
         loadedTextures = 0;
 
         const std::string modelDir = fs::path(modelPath).parent_path().string();
@@ -1183,19 +1211,26 @@ private:
         for (const auto& [reference, index] : textureMap) {
             if (index >= 0 && index < int(byIndex.size())) byIndex[index] = reference;
         }
+        textureRefs = byIndex;
 
         std::vector<int> remap(byIndex.size(), -1);
         for (size_t i = 0; i < byIndex.size(); i++) {
             if (byIndex[i].empty()) continue;
 
-            const std::string resolved =
-                resolveModelTexture(byIndex[i], modelDir, textureRoot);
-            if (resolved.empty()) {
+            std::string source;
+            const auto override = textureOverrides.find(byIndex[i]);
+            if (override != textureOverrides.end()) {
+                source = paaForPreview(override->second);
+            } else {
+                source = resolveModelTexture(byIndex[i], modelDir, textureRoot);
+            }
+
+            if (source.empty()) {
                 missingTextures.push_back(byIndex[i]);
                 continue;
             }
 
-            const int slot = renderer.AddTextureSlotWithMaterial(resolved);
+            const int slot = renderer.AddTextureSlotWithMaterial(source);
             if (slot < 0) {
                 missingTextures.push_back(byIndex[i]);
                 continue;
@@ -1305,14 +1340,55 @@ private:
             ImGui::TextColored(kDim, "Drag to rotate, scroll to zoom");
             if (ImGui::Button("Frame")) renderer.FrameObject();
             ImGui::Spacing();
-            ImGui::TextColored(kDim, "Textures");
-            ImGui::TextColored(loadedTextures ? kOk : kDim, "  %d loaded", loadedTextures);
-            for (const auto& missing : missingTextures) {
-                ImGui::TextColored(kBad, "  missing");
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", missing.c_str());
-                ImGui::SameLine();
-                ImGui::TextColored(kDim, "%s",
-                                   fs::path(missing).filename().string().c_str());
+            ImGui::TextColored(kDim, "Textures (%d of %zu loaded)",
+                               loadedTextures, textureRefs.size());
+            ImGui::Spacing();
+
+            for (size_t i = 0; i < textureRefs.size(); i++) {
+                if (textureRefs[i].empty()) continue;
+                ImGui::PushID(int(i));
+
+                const bool overridden = textureOverrides.count(textureRefs[i]) > 0;
+                const bool missing = std::find(missingTextures.begin(), missingTextures.end(),
+                                               textureRefs[i]) != missingTextures.end();
+
+                ImGui::TextColored(missing ? kBad : (overridden ? kAccent : kDim), "%s",
+                    fs::path(textureRefs[i]).filename().string().c_str());
+                if (ImGui::IsItemHovered()) {
+                    std::string tip = textureRefs[i];
+                    if (overridden) tip += "\nshowing: " + textureOverrides[textureRefs[i]];
+                    if (missing) tip += "\nnot found";
+                    ImGui::SetTooltip("%s", tip.c_str());
+                }
+
+                if (ImGui::SmallButton("Replace")) {
+                    const std::string reference = textureRefs[i];
+                    askForFiles("Use this texture instead",
+                                {"Textures", "*.paa *.png *.tga *.tif *.tiff *.jpg",
+                                 "All files", "*"},
+                                false, [this, reference](std::vector<std::string> files) {
+                        if (files.empty()) return;
+                        textureOverrides[reference] = files[0];
+                        uploadModelLod();
+                    });
+                }
+                if (overridden) {
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Revert")) {
+                        textureOverrides.erase(textureRefs[i]);
+                        uploadModelLod();
+                    }
+                }
+
+                ImGui::Spacing();
+                ImGui::PopID();
+            }
+
+            if (!textureOverrides.empty()) {
+                if (ImGui::SmallButton("Revert all")) {
+                    textureOverrides.clear();
+                    uploadModelLod();
+                }
             }
             ImGui::EndGroup();
         } else if (modelInfo.valid && modelError.empty()) {
@@ -1481,6 +1557,8 @@ private:
     char textureRoot[512] = {0};
     int loadedTextures = 0;
     std::vector<std::string> missingTextures;
+    std::vector<std::string> textureRefs;
+    std::map<std::string, std::string> textureOverrides;
 
     std::string viewPath;
     std::string viewError;
