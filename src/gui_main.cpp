@@ -1676,7 +1676,18 @@ private:
 
         if (renderer.HasMesh()) {
             ImGui::SameLine();
-            if (ImGui::Button("Apply to model", ImVec2(150, 32))) applyMaterialToModel();
+            if (ImGui::Button("Apply to model", ImVec2(150, 32))) applyMaterialToModel(false);
+            ImGui::SameLine();
+            ImGui::Checkbox("Live", &materialLive);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Push edits to the model as you make them");
+            }
+        }
+
+        // Edits above have already been made this frame, so this shows them
+        // on the next draw of the model rather than a frame later.
+        if (materialLive && renderer.HasMesh()) {
+            applyMaterialToModel(true);
         }
 
         if (!materialStatus.empty()) {
@@ -1689,6 +1700,31 @@ private:
         ImGui::SameLine();
 
         ImGui::BeginChild("materialPreview", ImVec2(0, 0), false);
+
+        // Editing here while the model sits on another tab means never seeing
+        // the change, so the model is drawn alongside when one is loaded.
+        if (renderer.IsInitialized() && renderer.HasMesh()) {
+            const float width = ImGui::GetContentRegionAvail().x;
+            const float height = std::min(320.0f, ImGui::GetContentRegionAvail().y * 0.45f);
+
+            renderer.SetViewportSize(int(width), int(height));
+            renderer.Render();
+
+            ImGui::Image((ImTextureID)(intptr_t)renderer.GetOutputTexture(),
+                         ImVec2(width, height), ImVec2(0, 1), ImVec2(1, 0));
+
+            if (ImGui::IsItemHovered()) {
+                const ImGuiIO& io = ImGui::GetIO();
+                if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                    renderer.RotateArcball(io.MouseDelta.x, io.MouseDelta.y, width, height);
+                }
+                if (io.MouseWheel != 0.0f) {
+                    renderer.AdjustCameraDistance(-io.MouseWheel * 0.4f);
+                }
+            }
+            ImGui::Spacing();
+        }
+
         ImGui::TextColored(kDim, "This is what gets written");
         const std::string text = arma3::writeRvmat(material);
         ImGui::InputTextMultiline("##preview", const_cast<char*>(text.c_str()), text.size() + 1,
@@ -1741,7 +1777,9 @@ private:
         materialStatus = "Opened " + fs::path(path).filename().string();
     }
 
-    void applyMaterialToModel() {
+    // Colours are cheap enough to push every frame; textures are only touched
+    // when the stage actually points somewhere new.
+    void applyMaterialToModel(bool quiet) {
         auto& slots = renderer.GetTextureSlotsMutable();
         for (auto& slot : slots) {
             for (int i = 0; i < 4; i++) {
@@ -1753,8 +1791,34 @@ private:
             slot.material.specularPower = material.specularPower;
             slot.material.hasRvmat = true;
         }
-        materialStatus = slots.empty() ? "The model has no textures to apply it to"
-                                       : "Applied to the model";
+
+        applyStageTexture(1, appliedNormal, true);
+        applyStageTexture(5, appliedSpecular, false);
+
+        if (!quiet) {
+            materialStatus = slots.empty() ? "The model has no textures to apply it to"
+                                           : "Applied to the model";
+        }
+    }
+
+    void applyStageTexture(int stageIndex, std::string& applied, bool isNormal) {
+        const auto stage = material.stages.find(stageIndex);
+        if (stage == material.stages.end()) return;
+
+        const std::string& reference = stage->second.texture;
+        if (reference.empty() || reference.front() == '#') return;   // procedural
+        if (reference == applied) return;
+
+        const std::string modelDir = fs::path(modelPath).parent_path().string();
+        const std::string resolved = resolveModelTexture(reference, modelDir, textureRoot);
+        if (resolved.empty()) return;
+
+        if (isNormal) {
+            renderer.LoadNormalTexture(resolved);
+        } else {
+            renderer.LoadSpecularTexture(resolved);
+        }
+        applied = reference;
     }
 
     // ---------------------------------------------------------------- actions
@@ -1915,6 +1979,9 @@ private:
     int materialTemplate = 0;
     std::string materialPath;
     bool materialActive = false;
+    bool materialLive = true;
+    std::string appliedNormal;
+    std::string appliedSpecular;
     char pixelFilter[64] = {0};
     char vertexFilter[64] = {0};
 
