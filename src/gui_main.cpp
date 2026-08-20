@@ -1845,15 +1845,19 @@ private:
         renderer.SetShaderStyle(
             arma3::ModelRenderer::StyleForPixelShader(material.pixelShaderID));
 
-        applyStageTexture(1, appliedNormal, true);
-        applyStageTexture(5, appliedSpecular, false);
+        applyStageTexture(1, appliedNormal, Stage::Normal);
+        applyStageTexture(2, appliedDetail, Stage::Detail);
+        applyStageTexture(3, appliedMacro, Stage::Macro);
+        applyStageTexture(5, appliedSpecular, Stage::Specular);
 
         if (!quiet) {
             materialStatus = "Applied";
         }
     }
 
-    void applyStageTexture(int stageIndex, std::string& applied, bool isNormal) {
+    enum class Stage { Normal, Detail, Macro, Specular };
+
+    void applyStageTexture(int stageIndex, std::string& applied, Stage which) {
         const auto stage = material.stages.find(stageIndex);
         if (stage == material.stages.end()) return;
 
@@ -1865,10 +1869,11 @@ private:
         const std::string resolved = resolveModelTexture(reference, modelDir, textureRoot);
         if (resolved.empty()) return;
 
-        if (isNormal) {
-            renderer.LoadNormalTexture(resolved);
-        } else {
-            renderer.LoadSpecularTexture(resolved);
+        switch (which) {
+            case Stage::Normal:   renderer.LoadNormalTexture(resolved); break;
+            case Stage::Detail:   renderer.LoadDetailTexture(resolved); break;
+            case Stage::Macro:    renderer.LoadMacroTexture(resolved); break;
+            case Stage::Specular: renderer.LoadSpecularTexture(resolved); break;
         }
         applied = reference;
     }
@@ -2036,6 +2041,8 @@ private:
     int appliedSections = 0;
     std::string appliedNormal;
     std::string appliedSpecular;
+    std::string appliedDetail;
+    std::string appliedMacro;
     char pixelFilter[64] = {0};
     char vertexFilter[64] = {0};
 

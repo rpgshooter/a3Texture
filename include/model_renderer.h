@@ -126,6 +126,8 @@ public:
 	static ShaderStyle StyleForPixelShader(const std::string& pixelShaderID);
 	bool LoadNormalTexture(const std::string& path);
 	bool LoadSpecularTexture(const std::string& path);
+	bool LoadDetailTexture(const std::string& path);
+	bool LoadMacroTexture(const std::string& path);
 	void ClearAllTextures();
 
 	bool HasDiffuseTexture() const { return m_DiffuseTexture != 0; }
@@ -225,6 +227,9 @@ private:
 	GLuint m_DiffuseTexture = 0;   // _co.paa - color/diffuse
 	GLuint m_NormalTexture = 0;	   // _nohq.paa - normal map
 	GLuint m_SpecularTexture = 0;  // _smdi.paa - specular/metallic
+	GLuint m_DetailTexture = 0;    // _dt.paa
+	GLuint m_MacroTexture = 0;     // _mc.paa
+	bool LoadStageTexture(const std::string& path, GLuint& target);
 	std::string m_DiffusePath;
 	std::string m_NormalPath;
 	std::string m_SpecularPath;
@@ -232,6 +237,10 @@ private:
 	// Shader uniform locations for multi-texture
 	GLint m_LocNormalMap = -1;
 	GLint m_LocSpecularMap = -1;
+	GLint m_LocDetailMap = -1;
+	GLint m_LocMacroMap = -1;
+	GLint m_LocHasDetailMap = -1;
+	GLint m_LocHasMacroMap = -1;
 	GLint m_LocHasNormalMap = -1;
 	GLint m_LocHasSpecularMap = -1;
 

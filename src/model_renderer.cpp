@@ -95,10 +95,14 @@ uniform float uAmbientIntensity;
 uniform vec3 uViewPos;
 uniform sampler2D uTextures[16];  // Array of diffuse textures (per-material)
 uniform sampler2D uNormalMap;     // Normal map (_nohq suffix in Arma 3)
-uniform sampler2D uSpecularMap;   // SMDI map (_smdi suffix): R=spec, G=gloss, A=emissive
+uniform sampler2D uSpecularMap;   // SMDI map (_smdi): green scales spec, blue is the exponent
+uniform sampler2D uDetailMap;     // _dt, multiplied at 2x so 0.5 is neutral
+uniform sampler2D uMacroMap;      // _mc, blended over the base by its own alpha
 uniform int uTextureCount;        // Number of active textures
 uniform int uHasNormalMap;
 uniform int uHasSpecularMap;
+uniform int uHasDetailMap;
+uniform int uHasMacroMap;
 
 // Which family of Arma shader this material asks for. The engine's own
 // shaders are not available here, so these are approximations that make the
@@ -287,6 +291,18 @@ void main() {
         diffuseLight = vec3(0.0);
         specularLight = vec3(0.0);
         envReflection = vec3(0.0);
+    }
+
+    // Macro sits over the base, weighted by its own alpha, and detail is a
+    // doubled multiply so a flat 0.5 leaves the surface untouched. Both match
+    // what the engine's shader does with these stages.
+    if (uHasMacroMap != 0) {
+        vec4 macro = texture(uMacroMap, vTexCoord);
+        color = mix(color, macro.rgb, macro.a);
+    }
+    if (uHasDetailMap != 0) {
+        vec3 detail = texture(uDetailMap, vTexCoord).rgb;
+        color = clamp(2.0 * detail * color, 0.0, 1.0);
     }
 
     vec3 result = (ambientLight + diffuseLight + specularLight) * color + emissiveColor + envReflection;
@@ -481,6 +497,10 @@ bool ModelRenderer::CreateShaders() {
 	m_LocNormalMap = glGetUniformLocation(m_ShaderProgram, "uNormalMap");
 	m_LocHasNormalMap = glGetUniformLocation(m_ShaderProgram, "uHasNormalMap");
 	m_LocSpecularMap = glGetUniformLocation(m_ShaderProgram, "uSpecularMap");
+	m_LocDetailMap = glGetUniformLocation(m_ShaderProgram, "uDetailMap");
+	m_LocMacroMap = glGetUniformLocation(m_ShaderProgram, "uMacroMap");
+	m_LocHasDetailMap = glGetUniformLocation(m_ShaderProgram, "uHasDetailMap");
+	m_LocHasMacroMap = glGetUniformLocation(m_ShaderProgram, "uHasMacroMap");
 	m_LocHasSpecularMap = glGetUniformLocation(m_ShaderProgram, "uHasSpecularMap");
 
 	// Get texture array uniform locations
@@ -1250,6 +1270,25 @@ void ModelRenderer::Render() {
 	float mvp[16], model[16], eyePos[3];
 	ComputeMatrices(mvp, model, eyePos);
 
+	// Detail on unit 18, macro on 19
+	if (m_DetailTexture != 0) {
+		glActiveTexture(GL_TEXTURE18);
+		glBindTexture(GL_TEXTURE_2D, m_DetailTexture);
+		glUniform1i(m_LocDetailMap, 18);
+		glUniform1i(m_LocHasDetailMap, 1);
+	} else {
+		glUniform1i(m_LocHasDetailMap, 0);
+	}
+
+	if (m_MacroTexture != 0) {
+		glActiveTexture(GL_TEXTURE19);
+		glBindTexture(GL_TEXTURE_2D, m_MacroTexture);
+		glUniform1i(m_LocMacroMap, 19);
+		glUniform1i(m_LocHasMacroMap, 1);
+	} else {
+		glUniform1i(m_LocHasMacroMap, 0);
+	}
+
 	// Draw ground grid and axes
 	if (m_ShowGrid) {
 		RenderGrid(mvp);
@@ -1880,6 +1919,40 @@ bool ModelRenderer::LoadNormalTexture(const std::string& path) {
 	m_NormalPath = path;
 	LOG_INFO("Normal map loaded: " + std::to_string(paa.width) + "x" + std::to_string(paa.height));
 	return true;
+}
+
+bool ModelRenderer::LoadStageTexture(const std::string& path, GLuint& target) {
+	if (!m_Initialized) return false;
+
+	if (target != 0) {
+		glDeleteTextures(1, &target);
+		target = 0;
+	}
+
+	std::filesystem::path filePath(path);
+	std::string ext = filePath.extension().string();
+	std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+	if (ext != ".paa" || !std::filesystem::exists(filePath)) {
+		LOG_ERROR("Stage texture not usable: " + path);
+		return false;
+	}
+
+	PAATexture paa = PAALoader::Load(path);
+	if (!paa.valid || !PAALoader::Upload(paa)) {
+		LOG_ERROR("Could not load stage texture: " + path);
+		return false;
+	}
+
+	target = paa.textureId;
+	return true;
+}
+
+bool ModelRenderer::LoadDetailTexture(const std::string& path) {
+	return LoadStageTexture(path, m_DetailTexture);
+}
+
+bool ModelRenderer::LoadMacroTexture(const std::string& path) {
+	return LoadStageTexture(path, m_MacroTexture);
 }
 
 bool ModelRenderer::LoadSpecularTexture(const std::string& path) {
