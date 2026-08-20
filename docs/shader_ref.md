@@ -527,6 +527,46 @@ Everything the pool does not cover. These are addressed by name and do not permu
 | `VSVolCloud` | 1 | ° 1 UV set; emits 9 varyings. Combined skinning and instancing block, per-object transform. |
 | `VSWater` | 1 | ° 1 UV set; emits 9 varyings. Per-object transform. |
 
+
+### What `ShaderPool` actually does
+
+Reading the smallest variant, 108 lines with no skinning or instancing, gives
+the core the whole pool is built around. In order:
+
+1. `POSITION` is transformed by a three-row matrix from `VSCB_Object1`, taking
+   the vertex from model space to world space.
+2. A per-object offset vector is added, scaled by a single scalar from another
+   buffer. This is the hook the wind, sway and LOD-morph variants drive.
+3. The result is multiplied by a four-row matrix from `VSCB_VeryFrequent`, the
+   view-projection, producing `gl_Position`.
+4. The clip-space position is written to `TEXCOORD7`, gated by a flag: if the
+   flag is zero the output is zeroed instead. This is what the pixel shaders use
+   to derive screen coordinates, and it is why they can read the screen-space
+   SSAO buffer at unit 16.
+5. The incoming UV is extended to `(u, v, 1)` and multiplied by two three-element
+   rows, applying a 2×3 affine transform to the texture coordinate.
+
+That last step is the vertex-side implementation of a stage's `uvTransform`. UV
+transforms declared in an RVMAT are applied here, not in the pixel shader. The
+largest variants carry two of them, one per UV set.
+
+Everything else in the pool is optional work layered onto that core. The largest
+variant, 692 lines, adds:
+
+- **Skinning.** 12 `texelFetch` calls against the bone matrix texture, which is
+  four bones at three rows per matrix, matching the four-component
+  `BLENDWEIGHT` and `BLENDINDICES` attributes.
+- **Per-vertex lighting.** Two loops over the light arrays, writing results to
+  `COLOR` and `COLOR1`.
+- **More varyings.** 13 outputs against the minimal variant's 3.
+
+So `ShaderPool` is the general object vertex shader: model-to-world-to-clip
+transform, UV transforms, and then whichever of skinning, instancing, vertex
+lighting and foliage animation the permutation enables. It is not a special
+shader for one purpose. It is the vertex stage for essentially every object in
+the game, which is why the documented per-material vertex shader names have
+nothing to point at.
+
 ### The pool's 38 combinations
 
 Each row is one distinct combination of input signature, constant buffers and
