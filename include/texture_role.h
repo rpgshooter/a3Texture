@@ -18,7 +18,8 @@ enum class TextureRole {
     NormalPlain,        // -> _no
     AmbientOcclusion,   // -> _as
     Metallic,           // -> _smdi green
-    Roughness,          // -> _smdi blue
+    Roughness,          // -> _smdi blue, inverted, since the engine wants gloss
+    Gloss,              // -> _smdi blue directly
     Detail              // -> _dt
 };
 

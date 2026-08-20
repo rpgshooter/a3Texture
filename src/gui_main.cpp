@@ -974,7 +974,7 @@ private:
                 break;
             case arma3::SwizzleType::SMDI:
                 sources[0] = "255"; sources[1] = "metallic / specular";
-                sources[2] = "roughness"; sources[3] = "255";
+                sources[2] = "specular power (gloss)"; sources[3] = "255";
                 break;
             case arma3::SwizzleType::AS:
                 sources[0] = "255"; sources[1] = "ambient occlusion";

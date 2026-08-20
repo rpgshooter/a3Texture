@@ -27,12 +27,12 @@ const Token kTokens[] = {
     {"normalopengl",     TextureRole::Normal,           SwizzleType::NONE, false},
     {"base_color",       TextureRole::BaseColor,        SwizzleType::NONE, false},
     {"basecolour",       TextureRole::BaseColor,        SwizzleType::NONE, false},
-    {"glossiness",       TextureRole::Roughness,        SwizzleType::NONE, true},
+    {"glossiness",            TextureRole::Gloss,            SwizzleType::NONE, false},
     {"basecolor",        TextureRole::BaseColor,        SwizzleType::NONE, false},
     {"metalness",        TextureRole::Metallic,         SwizzleType::NONE, false},
     {"normalmap",        TextureRole::Normal,           SwizzleType::NONE, false},
     {"occlusion",        TextureRole::AmbientOcclusion, SwizzleType::NONE, false},
-    {"roughness",        TextureRole::Roughness,        SwizzleType::NONE, false},
+    {"roughness",             TextureRole::Roughness,        SwizzleType::NONE, true},
     {"emissive",         TextureRole::Ignore,           SwizzleType::NONE, false},
     {"metallic",         TextureRole::Metallic,         SwizzleType::NONE, false},
     {"normaldx",         TextureRole::Normal,           SwizzleType::NONE, false},
@@ -46,12 +46,12 @@ const Token kTokens[] = {
     {"height",           TextureRole::Ignore,           SwizzleType::NONE, false},
     {"normal",           TextureRole::Normal,           SwizzleType::NONE, false},
     {"color",            TextureRole::BaseColor,        SwizzleType::NONE, false},
-    {"gloss",            TextureRole::Roughness,        SwizzleType::NONE, true},
+    {"gloss",                 TextureRole::Gloss,            SwizzleType::NONE, false},
     {"metal",            TextureRole::Metallic,         SwizzleType::NONE, false},
-    {"rough",            TextureRole::Roughness,        SwizzleType::NONE, false},
+    {"rough",                 TextureRole::Roughness,        SwizzleType::NONE, true},
     {"diff",             TextureRole::BaseColor,        SwizzleType::NONE, false},
     {"disp",             TextureRole::Ignore,           SwizzleType::NONE, false},
-    {"glos",             TextureRole::Roughness,        SwizzleType::NONE, true},
+    {"glos",                  TextureRole::Gloss,            SwizzleType::NONE, false},
     {"norm",             TextureRole::Normal,           SwizzleType::NONE, false},
     {"spec",             TextureRole::Metallic,         SwizzleType::NONE, false},
     {"alb",              TextureRole::BaseColor,        SwizzleType::NONE, false},
@@ -59,7 +59,7 @@ const Token kTokens[] = {
     {"mtl",              TextureRole::Metallic,         SwizzleType::NONE, false},
     {"nrm",              TextureRole::Normal,           SwizzleType::NONE, false},
     {"occ",              TextureRole::AmbientOcclusion, SwizzleType::NONE, false},
-    {"rgh",              TextureRole::Roughness,        SwizzleType::NONE, false},
+    {"rgh",                   TextureRole::Roughness,        SwizzleType::NONE, true},
     {"ao",               TextureRole::AmbientOcclusion, SwizzleType::NONE, false},
 
     // Arma's own names convert straight through.
@@ -242,6 +242,7 @@ std::vector<PlannedOutput> planOutputs(const std::vector<SourceFile>& sources) {
 
         const auto* metallic = find(group, TextureRole::Metallic);
         const auto* roughness = find(group, TextureRole::Roughness);
+        if (!roughness) roughness = find(group, TextureRole::Gloss);
 
         if (metallic || roughness) {
             PlannedOutput output;
@@ -284,7 +285,8 @@ std::vector<RoleOption> roleOptions() {
         {TextureRole::NormalPlain,      "Normal (plain)"},
         {TextureRole::AmbientOcclusion, "Ambient occlusion"},
         {TextureRole::Metallic,         "Metallic / specular"},
-        {TextureRole::Roughness,        "Roughness"},
+        {TextureRole::Gloss,            "Gloss / specular power"},
+        {TextureRole::Roughness,        "Roughness (inverted to gloss)"},
         {TextureRole::Detail,           "Detail"}
     };
 }
@@ -303,7 +305,8 @@ TextureRole roleFromName(const std::string& name) {
     if (key == "normalplain" || key == "no") return TextureRole::NormalPlain;
     if (key == "ao" || key == "occlusion") return TextureRole::AmbientOcclusion;
     if (key == "metallic" || key == "specular") return TextureRole::Metallic;
-    if (key == "roughness" || key == "gloss") return TextureRole::Roughness;
+    if (key == "roughness") return TextureRole::Roughness;
+    if (key == "gloss" || key == "glossiness") return TextureRole::Gloss;
     if (key == "detail") return TextureRole::Detail;
     if (key == "arma" || key == "packed") return TextureRole::ArmaMap;
     return TextureRole::Ignore;
