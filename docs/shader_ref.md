@@ -504,34 +504,75 @@ lines of GLSL against a median of 403.
 
 ### Named vertex shaders
 
-Everything the pool does not cover. These are addressed by name and do not
-permute.
+Everything the pool does not cover. These are addressed by name and do not permute.
 
-| entry point | variants | attributes | cb | textures |
-|---|--:|--:|--:|---|
-| `VSCalmWater` | 1 | 6 | 6 | — |
-| `VSNonTL` | 1 | 5 | 0 | — |
-| `VSPoint` | 1 | 3 | 3 | — |
-| `VSRoad` | 1 | 8 | 6 | — |
-| `VSShadowVolume` | 1 | 2 | 3 | — |
-| `VSShadowVolumeInstanced` | 1 | 6 | 3 | — |
-| `VSShadowVolumeSkinned` | 1 | 9 | 4 | `animMatrixTexture` |
-| `VSShadowVolumeSkinnedInstanced` | 1 | 13 | 3 | `animMatrixTexture` |
-| `VSShore` | 1 | 7 | 5 | — |
-| `VSSimulWeatherClouds` | 3 | 5 | 4 | `cloud_density_1`, `cloud_density_2` |
-| `VSSprite` | 1 | 5 | 7 | — |
-| `VSSpriteOnSurface` | 1 | 5 | 7 | — |
-| `VSStar` | 1 | 3 | 5 | — |
-| `VSTerrain` | 4 | 8 | 6 | — |
-| `VSTerrainGrass` | 3 | 8 | 4 | — |
-| `VSUnderwaterOcclusion` | 1 | 6 | 3 | — |
-| `VSVolCloud` | 1 | 2 | 6 | — |
-| `VSWater` | 1 | 2 | 6 | — |
+| entry point | variants | behaviour |
+|---|--:|---|
+| `VSCalmWater` | 1 | ° 2 UV sets; 2 tangent streams; emits 9 varyings. Per-object transform. |
+| `VSNonTL` | 1 | ° 2 UV sets; emits 3 varyings. |
+| `VSPoint` | 1 | ° 1 UV set; emits 10 varyings. Per-object transform. |
+| `VSRoad` | 1 | ° 2 UV sets; 2 tangent streams; emits 11 varyings. Per-object transform. |
+| `VSShadowVolume` | 1 | ° 2 input attributes; emits position only. Per-object transform. |
+| `VSShadowVolumeInstanced` | 1 | ° instanced with per-instance transform and colour; emits position only. Per-object transform. |
+| `VSShadowVolumeSkinned` | 1 | ° skinned, 3 weight sets fetched against a bone matrix texture; emits position only. Combined skinning and instancing block, per-object transform. |
+| `VSShadowVolumeSkinnedInstanced` | 1 | ° skinned, 3 weight sets fetched against a bone matrix texture; instanced with per-instance transform and colour; emits position only. Per-object transform. |
+| `VSShore` | 1 | ° 1 UV set; 2 tangent streams; emits 9 varyings. Per-object transform. |
+| `VSSimulWeatherClouds` | 3 | ° 4 UV sets; emits 10 varyings; samples 2 textures. Per-object transform, volumetric cloud density. |
+| `VSSprite` | 1 | ° 1 UV set; emits 9 varyings. Dynamic point and spot lights, per-object transform. |
+| `VSSpriteOnSurface` | 1 | ° 1 UV set; emits 9 varyings. Dynamic point and spot lights, per-object transform. |
+| `VSStar` | 1 | ° 1 UV set; emits 10 varyings. Per-object transform. |
+| `VSTerrain` | 4 | ° 2 UV sets; 2 tangent streams; emits 12 varyings. Per-object transform. |
+| `VSTerrainGrass` | 3 | ° 2 UV sets; 2 tangent streams; emits 7 varyings. Per-object transform. |
+| `VSUnderwaterOcclusion` | 1 | ° 2 UV sets; 2 tangent streams; emits 3 varyings. Per-object transform. |
+| `VSVolCloud` | 1 | ° 1 UV set; emits 9 varyings. Combined skinning and instancing block, per-object transform. |
+| `VSWater` | 1 | ° 1 UV set; emits 9 varyings. Per-object transform. |
 
-`VSSimulWeatherClouds` binding `cloud_density_1` and `cloud_density_2` is the
-volumetric cloud system sampling two density volumes. The `VSShadowVolume` group
-is the shadow-volume extrusion path, in plain, skinned, instanced and
-skinned-instanced forms, matching the same axes the pool permutes over.
+### The pool's 38 combinations
+
+Each row is one distinct combination of input signature, constant buffers and
+textures. Several compiled blobs share a row, differing only in code paths that
+reflection does not expose, so the GLSL size range is given instead.
+
+| blobs | skinned | instanced | lights | tree | skin+inst block | GLSL lines |
+|--:|---|---|---|---|---|---|
+| 42 | yes | yes | yes | — | — | 573–645 |
+| 40 | — | — | yes | — | — | 337–406 |
+| 40 | — | yes | yes | — | — | 352–424 |
+| 40 | yes | — | yes | — | yes | 610–685 |
+| 34 | yes | — | — | — | yes | 502–579 |
+| 32 | — | — | — | — | — | 231–300 |
+| 32 | — | yes | — | — | — | 239–318 |
+| 32 | yes | yes | — | — | — | 451–539 |
+| 12 | — | — | yes | yes | — | 383–407 |
+| 12 | — | yes | yes | yes | — | 404–431 |
+| 12 | yes | yes | yes | yes | — | 625–652 |
+| 10 | — | — | — | — | — | 124–203 |
+| 10 | — | — | — | yes | — | 281–300 |
+| 10 | yes | — | — | — | yes | 396–478 |
+| 10 | yes | yes | — | yes | — | 523–545 |
+| 10 | — | yes | — | yes | — | 302–324 |
+| 8 | yes | — | — | yes | yes | 568–585 |
+| 8 | — | yes | — | — | — | 118–163 |
+| 8 | yes | — | yes | yes | yes | 674–692 |
+| 8 | yes | — | — | — | yes | 503–528 |
+| 8 | yes | yes | — | — | — | 448–487 |
+| 8 | yes | yes | — | — | — | 330–384 |
+| 8 | — | — | — | — | — | 230–254 |
+| 8 | — | yes | — | — | — | 236–266 |
+| 6 | — | — | — | — | — | 108–146 |
+| 6 | yes | yes | — | — | — | 320–369 |
+| 6 | yes | — | — | — | yes | 380–420 |
+| 6 | — | yes | — | — | — | 108–148 |
+| 2 | yes | yes | — | — | — | 410–418 |
+| 2 | yes | — | — | — | yes | 385–390 |
+| 2 | — | — | — | — | — | 112–117 |
+| 2 | — | — | yes | — | — | 301–309 |
+| 2 | — | yes | — | — | — | 198–206 |
+| 2 | yes | yes | yes | — | — | 516–524 |
+| 2 | yes | — | yes | — | yes | 576–584 |
+| 2 | — | yes | — | — | — | 112–117 |
+| 2 | yes | yes | — | — | — | 325–330 |
+| 2 | — | yes | yes | — | — | 304–312 |
 
 ## Post-process
 
@@ -827,6 +868,88 @@ names, so the documented bare IDs have nothing behind them.
 | `TerrainSimple8` | terrainSimple - X layers |
 | `TerrainSimple9` | terrainSimple - X layers |
 
+
+
+## Documented vertex shaders versus compiled ones
+
+The documentation lists 44 vertex shader IDs. Checked against the containers
+with the same prefix-aware, whole-token method used for the pixel shaders, with
+positive and negative controls, they fall into three groups.
+
+| outcome | count |
+|---|--:|
+| has a real `VS` entry point | 14 |
+| exists only as a pixel shader | 12 |
+| no entry point anywhere | 18 |
+
+Fewer than a third of the documented vertex shader IDs name an actual vertex
+shader.
+
+### Real vertex shaders (14)
+
+`CalmWater`, `Point`, `Road`, `ShadowVolume`, `Shore`, `SimulWeatherClouds`, `Sprite`, `SpriteOnSurface`, `Star`, `Terrain`, `TerrainGrass`, `UnderwaterOcclusion`, `VolCloud`, `Water`
+
+### Listed as vertex shaders but compiled only as pixel shaders (12)
+
+These names exist, so a search finds them and the ID looks valid, but there is
+no `VS` entry point behind any of them. They are pixel shaders that the vertex
+list repeats.
+
+| ID | compiled as |
+|---|---|
+| `Grass` | `PSGrass` |
+| `Multi` | `PSMulti` |
+| `NormalMap` | `PSNormalMap` |
+| `Refract` | `PSRefract` |
+| `SimulWeatherCloudsCPU` | `PSSimulWeatherCloudsCPU` |
+| `Skin` | `PSSkin` |
+| `Super` | `PSSuper` |
+| `Tree` | `PSTree` |
+| `TreeAdv` | `PSTreeAdv` |
+| `TreeAdvTrunk` | `PSTreeAdvTrunk` |
+| `TreePRT` | `PSTreePRT` |
+| `WaterSimple` | `PSWaterSimple` |
+
+### No entry point at all (18)
+
+| ID | described as |
+|---|---|
+| `Basic` | N/A |
+| `BasicAS` | ambient shadow |
+| `BasicFade` | basic with face fading (based on the angle with camera direction |
+| `Dummy1` |  |
+| `Dummy2` |  |
+| `Dummy3` |  |
+| `NormalMapAS` | normal map with ambient shadow |
+| `NormalMapDiffuse` | normal map + detail map |
+| `NormalMapDiffuseAS` | diffuse normal map with ambient shadow Glass /*glass shader*/ \\ |
+| `NormalMapSpecularThrough` | normal map with specular - tree shader |
+| `NormalMapSpecularThroughNoFade` | normal map with specular - tree shader - without face fading |
+| `NormalMapThrough` | normal map - tree shader |
+| `NormalMapThroughNoFade` | normal map - tree shader - without face fading |
+| `SimulWeatherCloudsGS` | simul weather clouds with geom shader |
+| `TreeAdvModNormals` | advanced tree crown shader with modified vertex normals |
+| `TreeAdvNoFade` | advanced tree crown shader - no face fading |
+| `TreeNoFade` | Tree shader - cheap shader designed for trees and bushes - without face fading |
+| `TreePRTNoFade` | Tree shader - very cheap shader designed for trees and bushes - without face fading |
+
+The `Through` and `NoFade` tree shaders are the notable absence here. The
+documentation describes a family of face-fading and non-fading tree variants,
+and none of them exists as a vertex shader. The fading behaviour lives in the
+pixel shaders, where `SpecularNormalMapThrough` and its relatives are compiled.
+
+### Undocumented compiled vertex shaders
+
+The omission runs the other way too. Five compiled vertex entry points appear
+nowhere in the documentation:
+
+`NonTL`, `ShaderPool`, `ShadowVolumeInstanced`, `ShadowVolumeSkinned`,
+`ShadowVolumeSkinnedInstanced`
+
+`ShaderPool` is the significant one. It is the entry point behind 3600 of the
+3632 vertex records, so the shader that performs nearly all vertex work in the
+engine is the one the documentation never mentions. The documented vertex list
+describes the specialists and omits the general case.
 
 ## How the absence claims were validated
 
