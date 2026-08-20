@@ -1,6 +1,7 @@
-# Arma 3 pixel shader reference
+# Arma 3 shader reference
 
-Measured from `Dta/bin.pbo` of a retail install. Counts are from each shader's
+Measured from `Dta/bin.pbo` of a retail install, covering the pixel, vertex,
+post-process, compute and geometry containers. Counts are from each shader's
 DXBC reflection data; stages are read from the shader's own name, which encodes them.
 
 Descriptions marked ✱ are quoted from the official documentation. Descriptions
@@ -10,10 +11,13 @@ the note on method at the end. No shader code is reproduced here.
 | container | distinct entry points | compiled blobs | note |
 |---|---|---|---|
 | `Shaders_5_0_PS.shdc` | 408 | 690 | object, terrain, water, sky, sprite |
-| `Shaders_5_0_VS.shdc` | 19 | 3632 | most share `VSShaderPool`; names cannot disambiguate |
-| `Shaders_5_0_PP.shdc` | 108 | 213 | post-process |
+| `Shaders_5_0_VS.shdc` | 19 | 3632 | 511 distinct after dedup; 3600 records share `VSShaderPool` |
+| `Shaders_5_0_PP.shdc` | 133 | 213 | post-process; holds pixel, vertex and compute stages |
 | `Shaders_5_0_CS.shdc` | 5 | 5 | compute |
 | `Shaders_5_0_GS.shdc` | 1 | 1 | geometry |
+
+The post-process container is not pixel-only: of its 133 entry points, 108 are
+pixel shaders, 18 vertex and 7 compute.
 
 The 4.0 containers mirror the 5.0 ones with the same entry point names.
 
@@ -463,216 +467,276 @@ The 4.0 containers mirror the 5.0 ones with the same entry point names.
 | `DEBUGSHDTerrainX` | 16 | 4 | 929 |  | ° samples 9 textures with model UVs; 6 textures at computed coordinates; reads the screen-space SSAO and caustics buffer. Terrain layer blending, multi-layer terrain, debug visualisation. |
 ## Vertex shaders
 
-Entry point names are useless here: 19 names cover 3632 compiled blobs, most of
-them sharing `VSShaderPool`, because they are permutations of one uber-shader
-compiled with different defines. Input signatures do separate them. All 3632
-blobs parse, and they use only **17 distinct vertex formats**.
+The container holds 3632 records under only 19 entry point names, 3600 of them
+called `VSShaderPool`. Deduplicating by content shows the repetition is largely
+storage: the 3632 records are **511 distinct shaders**, of which 486 are pool
+variants and 18 are named specialists. All 511 translate cleanly.
 
-Four of those seventeen account for 3602 blobs, or 99.2% of the container, and
-they are a clean two-by-two: static or skinned, instanced or not.
+### The uber-shader pool
 
-| blobs | vertex format | meaning |
-|--:|---|---|
-| 922 | `POSITION, NORMAL, TEXCOORD, TEXCOORD1, TANGENT, TANGENT1` | static mesh |
-| 920 | the above + `instTransform0-2, instColor, instShadow` | static, instanced |
-| 920 | static + `BLENDWEIGHT, BLENDINDICES` + instancing | skinned, instanced |
-| 840 | static + `BLENDWEIGHT, BLENDINDICES` | skinned mesh |
+The 486 pool variants reduce to **38 distinct combinations** of input signature,
+constant buffers and textures. These are the axes that vary, each close to an
+even split, which is what a compiled permutation matrix looks like:
 
-That is the whole permutation space for ordinary geometry. The uber-shader
-varies over skinning and instancing, and nothing else about vertex input.
+| axis | on | off | evidence |
+|---|--:|--:|---|
+| skinned | 242 | 244 | `BLENDWEIGHT` and `BLENDINDICES` in the input signature |
+| instanced | 246 | 240 | `instTransform0-2` attributes |
+| bone matrix texture | 242 | 244 | binds `animMatrixTexture` |
+| dynamic lights | 214 | 272 | binds `VSCB_Lights1` and `VSCB_Lights2` |
+| skinning-instancing block | 118 | 368 | binds `VSCB_SkinningInstancing` |
+| tree | 82 | 404 | binds `VSCB_Tree` |
 
-The remaining 30 blobs are specialists:
+Input signatures within the pool number exactly four, and they are the skinning
+and instancing axes crossed: plain, skinned, instanced, and both, at 122, 118,
+122 and 124 variants.
 
-| blobs | vertex format | likely use |
-|--:|---|---|
-| 15 | `POSITION, NORMAL, TEXCOORD, TANGENT, TANGENT1, POSITION1, POSITION2, TEXCOORD2` | multi-position, morph or shadow extrusion |
-| 2 | `POSITION, TEXCOORD, COLOR` | simple coloured geometry |
-| 2 | `POSITION, TEXCOORD, TEXCOORD1, TEXCOORD2, TEXCOORD3` | four UV sets, terrain or layered blend |
-| 2 | `TEXCOORD, instPosition, instColor, instMapping_Angle, instEmissiveColor` | instanced sprites and lights |
-| 1 | `POSITION, COLOR, COLOR1, TEXCOORD, TEXCOORD1` | particles |
-| 1 | `POSITION, NORMAL` | depth or shadow only |
-| 1 | `POSITION, NORMAL, instTransform0-2, animTextureOffset` | animated-texture instancing |
-| 1 each | three `POSITION/BLENDWEIGHT/BLENDINDICES` sets, with and without instancing | multi-bone or cloth |
+**Skinning is texture-based.** Binding `animMatrixTexture` matches carrying
+`BLENDWEIGHT` exactly, 242 to 242 with no exceptions either way, and the same
+pairing holds in the named `VSShadowVolume` family. Bone matrices are fetched
+from a texture rather than uploaded as constants, which is what lets one shader
+serve any bone count.
 
-### What this means for modelling
+Below those axes the variants still differ in code, since 38 reflection
+combinations cover 486 blobs. Those remaining differences are compile-time
+branches that reflection does not expose; translated size ranges from 108 to 692
+lines of GLSL against a median of 403.
 
-- Models supply **two UV sets** and **two tangent streams**. The second UV set
-  is real vertex data, not something a material synthesises.
-- Skinning is four-weight, via `BLENDWEIGHT` and `BLENDINDICES`.
-- Instancing is a vertex-level feature carrying its own transform, colour, and
-  a dedicated `instShadow` attribute. No material property turns it on.
-- Four-UV and multi-position formats exist but are used by a handful of shaders,
-  so they are engine-internal rather than something a material can request.
+### Named vertex shaders
 
-Constant buffer counts were not reliably readable for the pooled vertex blobs
-and are omitted rather than guessed.
+Everything the pool does not cover. These are addressed by name and do not
+permute.
+
+| entry point | variants | attributes | cb | textures |
+|---|--:|--:|--:|---|
+| `VSCalmWater` | 1 | 6 | 6 | — |
+| `VSNonTL` | 1 | 5 | 0 | — |
+| `VSPoint` | 1 | 3 | 3 | — |
+| `VSRoad` | 1 | 8 | 6 | — |
+| `VSShadowVolume` | 1 | 2 | 3 | — |
+| `VSShadowVolumeInstanced` | 1 | 6 | 3 | — |
+| `VSShadowVolumeSkinned` | 1 | 9 | 4 | `animMatrixTexture` |
+| `VSShadowVolumeSkinnedInstanced` | 1 | 13 | 3 | `animMatrixTexture` |
+| `VSShore` | 1 | 7 | 5 | — |
+| `VSSimulWeatherClouds` | 3 | 5 | 4 | `cloud_density_1`, `cloud_density_2` |
+| `VSSprite` | 1 | 5 | 7 | — |
+| `VSSpriteOnSurface` | 1 | 5 | 7 | — |
+| `VSStar` | 1 | 3 | 5 | — |
+| `VSTerrain` | 4 | 8 | 6 | — |
+| `VSTerrainGrass` | 3 | 8 | 4 | — |
+| `VSUnderwaterOcclusion` | 1 | 6 | 3 | — |
+| `VSVolCloud` | 1 | 2 | 6 | — |
+| `VSWater` | 1 | 2 | 6 | — |
+
+`VSSimulWeatherClouds` binding `cloud_density_1` and `cloud_density_2` is the
+volumetric cloud system sampling two density volumes. The `VSShadowVolume` group
+is the shadow-volume extrusion path, in plain, skinned, instanced and
+skinned-instanced forms, matching the same axes the pool permutes over.
 
 ## Post-process
-These are the screen-space effects, and they are the least documented part of
-the renderer: 108 entry points across 213 compiled blobs, none of them
-addressable from a material. They run as engine passes. Grouping is by name.
 
-Instruction counts are given only where the texture and constant-buffer pair
-identifies a single blob; a blank means several blobs share that shape and the
-count would be a guess.
+The screen-space effects. This container holds 133 entry points across three
+stages: 108 pixel, 18 vertex and 7 compute. None is reachable
+from a material; they run as engine passes. Descriptions are derived by the same
+translation method used for the object shaders.
 
-### Anti-aliasing (7)
-| entry point | tex | cb | instr |
-|---|--:|--:|--:|
-| `A3_SMAABlendingWeightCalculationPS` | 3 | 1 |  |
-| `A3_SMAAColorEdgeDetectionPS` | 2 | 0 |  |
-| `A3_SMAANeighborhoodBlendingPS` | 2 | 1 |  |
-| `DbgDisplayEdgesPS` | 1 | 0 |  |
-| `Edges0PS` | 1 | 1 |  |
-| `Edges1PS` | 1 | 1 |  |
-| `EdgesCombinePS` | 1 | 1 |  |
+### Anti-aliasing (15)
+
+| entry point | stage | behaviour |
+|---|---|---|
+| `A3_SMAABlendingWeightCalculationPS` | pixel | ° reads 3 input targets; 13 texture reads; iterative. Anti-aliasing. |
+| `A3_SMAABlendingWeightCalculationVS` | vertex | ° vertex stage, no texture input. |
+| `A3_SMAAColorEdgeDetectionPS` | pixel | ° reads 2 input targets; 10 texture reads. |
+| `A3_SMAAEdgeDetectionVS` | vertex | ° vertex stage, no texture input. |
+| `A3_SMAANeighborhoodBlendingPS` | pixel | ° reads 2 input targets; 6 texture reads. Anti-aliasing. |
+| `A3_SMAANeighborhoodBlendingVS` | vertex | ° vertex stage, no texture input. |
+| `DbgDisplayEdgesPS` | pixel | ° reads 1 input target. |
+| `Edges0PS` | pixel | ° reads 1 input target. |
+| `Edges1PS` | pixel | ° reads 1 input target. |
+| `EdgesCombinePS` | pixel | ° pixel stage, no texture input. |
+| `PsFxaa3_11` | pixel | ° reads 1 input target; 12 texture reads. Anti-aliasing. |
+| `PsFxaa3_11Luma` | pixel | ° reads 1 input target. |
+| `VSPostProcessCMAA` | vertex | ° vertex stage, no texture input. |
+| `VSPostProcessCustomEdge4T` | vertex | ° vertex stage, no texture input. |
+| `VsFxaa3_11` | vertex | ° vertex stage, no texture input. |
+
+### Ambient occlusion (15)
+
+| entry point | stage | behaviour |
+|---|---|---|
+| `CSHDAO` | compute | ° compute stage, no texture input. |
+| `PSHDAO` | pixel | ° reads 1 input target; 9 texture reads. |
+| `PSPostProcessSSAO` | pixel | ° reads 2 input targets; 37 texture reads. Screen-space ambient occlusion. |
+| `PSPostProcessSSAOBlurHorz` | pixel | ° reads 1 input target; 7 texture reads. Screen-space ambient occlusion. |
+| `PSPostProcessSSAOBlurHorzDepth` | pixel | ° reads 2 input targets; 15 texture reads. Screen-space ambient occlusion. |
+| `PSPostProcessSSAOBlurVert` | pixel | ° reads 1 input target; 7 texture reads. Screen-space ambient occlusion. |
+| `PSPostProcessSSAOBlurVertDepth` | pixel | ° reads 2 input targets; 15 texture reads. Screen-space ambient occlusion. |
+| `PSPostProcessSSAODebug` | pixel | ° reads 1 input target. |
+| `PSPostProcessSSAODown` | pixel | ° reads 1 input target; 4 texture reads. |
+| `PSPostProcessSSAOFinal` | pixel | ° reads 1 input target. |
+| `PSSSAO` | pixel | ° reads 1 input target; 33 texture reads. |
+| `PSSSAOBlurHoriz` | pixel | ° reads 2 input targets; 10 texture reads. |
+| `PSSSAOBlurVert` | pixel | ° reads 2 input targets; 10 texture reads. |
+| `VSPostProcessSSAO` | vertex | ° vertex stage, no texture input. |
+| `VSPostProcessSSAODown` | vertex | ° vertex stage, no texture input. |
+
+### Shadow filtering (5)
+
+| entry point | stage | behaviour |
+|---|---|---|
+| `PSPostProcessSSSMHigh` | pixel | ° reads 1 input target; 17 texture reads; samples a shadow map. |
+| `PSPostProcessSSSMLow` | pixel | ° reads 1 input target; samples a shadow map. |
+| `PSPostProcessSSSMNormal` | pixel | ° reads 1 input target; 5 texture reads; samples a shadow map. |
+| `PSPostProcessSSSMStencil` | pixel | ° pixel stage, no texture input. |
+| `PSPostProcessSSSMVeryHigh` | pixel | ° reads 1 input target; 17 texture reads; samples a shadow map. |
 
 ### God rays (6)
-| entry point | tex | cb | instr |
-|---|--:|--:|--:|
-| `PSGodRaysApplyClouds` | 2 | 0 |  |
-| `PSGodRaysBlur` | 1 | 1 |  |
-| `PSGodRaysCompose` | 1 | 1 |  |
-| `PSGodRaysDownscaleH` | 1 | 1 |  |
-| `PSGodRaysDownscaleV` | 1 | 1 |  |
-| `PSGodRaysLightSource` | 0 | 1 |  |
+
+| entry point | stage | behaviour |
+|---|---|---|
+| `PSGodRaysApplyClouds` | pixel | ° reads 2 input targets. |
+| `PSGodRaysBlur` | pixel | ° reads 1 input target; iterative. God rays. |
+| `PSGodRaysCompose` | pixel | ° reads 1 input target. God rays. |
+| `PSGodRaysDownscaleH` | pixel | ° reads 1 input target; 5 texture reads. God rays. |
+| `PSGodRaysDownscaleV` | pixel | ° reads 1 input target; 5 texture reads. God rays. |
+| `PSGodRaysLightSource` | pixel | ° God rays. |
 
 ### Bloom (7)
-| entry point | tex | cb | instr |
-|---|--:|--:|--:|
-| `PSPostProcessBloomCombine` | 2 | 1 |  |
-| `PSPostProcessBloomDownsample2` | 2 | 2 |  |
-| `PSPostProcessBloomDownsample4` | 1 | 1 |  |
-| `PSPostProcessGlowNewBloomCompose` | 1 | 0 |  |
-| `PSPostProcessGlowNewBloomInitDownsample` | 1 | 1 |  |
-| `PSPostProcessGlowNewBloomInitDownsample4x` | 4 | 1 |  |
-| `PSPostProcessGlowNewBloomKawase` | 1 | 1 |  |
+
+| entry point | stage | behaviour |
+|---|---|---|
+| `PSPostProcessBloomCombine` | pixel | ° reads 2 input targets. Bloom. |
+| `PSPostProcessBloomDownsample2` | pixel | ° reads 2 input targets; 5 texture reads. Bloom. |
+| `PSPostProcessBloomDownsample4` | pixel | ° reads 1 input target; iterative. |
+| `PSPostProcessGlowNewBloomCompose` | pixel | ° reads 1 input target. |
+| `PSPostProcessGlowNewBloomInitDownsample` | pixel | ° reads 1 input target. Bloom. |
+| `PSPostProcessGlowNewBloomInitDownsample4x` | pixel | ° reads 4 input targets. Bloom. |
+| `PSPostProcessGlowNewBloomKawase` | pixel | ° reads 1 input target; 4 texture reads. Bloom. |
 
 ### Depth of field (2)
-| entry point | tex | cb | instr |
-|---|--:|--:|--:|
-| `PSPostProcessDOF` | 3 | 1 |  |
-| `PSPostProcessDistanceDOF` | 3 | 1 |  |
 
-### Exposure and tone (13)
-| entry point | tex | cb | instr |
-|---|--:|--:|--:|
-| `PSPostProcessAssumedLuminance` | 2 | 1 |  |
-| `PSPostProcessAssumedLuminanceDirect` | 1 | 1 |  |
-| `PSPostProcessColorsSimple` | 1 | 1 |  |
-| `PSPostProcessDownSampleAvgLuminance` | 4 | 0 |  |
-| `PSPostProcessDownSampleLuminance` | 4 | 0 |  |
-| `PSPostProcessDownSampleMaxAvgMinLuminance` | 4 | 0 |  |
-| `PSPostProcessGlowNewLuminanceAvg2x` | 1 | 0 |  |
-| `PSPostProcessGlowNewLuminanceAvg4x` | 4 | 0 |  |
-| `PSPostProcessGlowNewLuminanceInit` | 4 | 1 |  |
-| `PSPostProcessHDRColorLimit` | 1 | 1 |  |
-| `PSPostProcessHDRColorLimitNVG` | 1 | 1 |  |
-| `PsPpColors` | 1 | 1 |  |
-| `PsPpColorsRadial` | 2 | 1 |  |
+| entry point | stage | behaviour |
+|---|---|---|
+| `PSPostProcessDOF` | pixel | ° reads 3 input targets; 6 texture reads; iterative. |
+| `PSPostProcessDistanceDOF` | pixel | ° reads 3 input targets; 5 texture reads; iterative. |
 
-### Blur and filter (15)
-| entry point | tex | cb | instr |
-|---|--:|--:|--:|
-| `PSFilterX` | 2 | 1 |  |
-| `PSFilterY` | 2 | 1 |  |
-| `PSPostProcessGaussBlur` | 1 | 1 |  |
-| `PSPostProcessGaussianBlurH` | 1 | 1 |  |
-| `PSPostProcessGaussianBlurV` | 1 | 1 |  |
-| `PSPostProcessSSAOBlurHorz` | 1 | 1 |  |
-| `PSPostProcessSSAOBlurHorzDepth` | 2 | 1 |  |
-| `PSPostProcessSSAOBlurVert` | 1 | 1 |  |
-| `PSPostProcessSSAOBlurVertDepth` | 2 | 1 |  |
-| `PSSSAOBlurHoriz` | 2 | 1 |  |
-| `PSSSAOBlurVert` | 2 | 1 |  |
-| `PsPpDynamicBlur` | 1 | 1 |  |
-| `PsPpDynamicBlurFinal` | 2 | 0 |  |
-| `PsPpRadialBlur` | 1 | 1 |  |
-| `PsPpRotBlur` | 2 | 0 |  |
+### Exposure and tone (18)
 
-### Water and caustics (2)
-| entry point | tex | cb | instr |
-|---|--:|--:|--:|
-| `PSPostProcessCaustics` | 2 | 2 |  |
-| `PsPpWetDistort` | 2 | 1 |  |
+| entry point | stage | behaviour |
+|---|---|---|
+| `CSCalculateHistogramLum` | compute | ° reads 1 input target; iterative. |
+| `CSCalculateHistogramThermal` | compute | ° reads 1 input target; iterative. |
+| `CSComputeCDFFromHistogram` | compute | ° iterative. |
+| `CSMergeHistogram` | compute | ° iterative. |
+| `PSPostProcessAssumedLuminance` | pixel | ° reads 2 input targets. |
+| `PSPostProcessAssumedLuminanceDirect` | pixel | ° reads 1 input target. |
+| `PSPostProcessColorsSimple` | pixel | ° reads 1 input target. |
+| `PSPostProcessDownSampleAvgLuminance` | pixel | ° reads 4 input targets. |
+| `PSPostProcessDownSampleLuminance` | pixel | ° reads 4 input targets. |
+| `PSPostProcessDownSampleMaxAvgMinLuminance` | pixel | ° reads 4 input targets. |
+| `PSPostProcessGlowNewLuminanceAvg2x` | pixel | ° reads 1 input target. |
+| `PSPostProcessGlowNewLuminanceAvg4x` | pixel | ° reads 4 input targets. |
+| `PSPostProcessGlowNewLuminanceInit` | pixel | ° reads 4 input targets. Bloom. |
+| `PSPostProcessHDRColorLimit` | pixel | ° reads 1 input target. Bloom. |
+| `PSPostProcessHDRColorLimitNVG` | pixel | ° reads 1 input target. Bloom. |
+| `PsPpColors` | pixel | ° reads 1 input target. |
+| `PsPpColorsRadial` | pixel | ° reads 2 input targets. Radial colour grading. |
+| `VsPpColors` | vertex | ° vertex stage, no texture input. |
 
-### Vision modes (8)
-| entry point | tex | cb | instr |
-|---|--:|--:|--:|
-| `PSPostProcessGlowNewFinalNVG` | 2 | 1 |  |
-| `PSPostProcessGlowNewFinalNightFilmic` | 2 | 1 |  |
-| `PSPostProcessGlowNewFinalNightNone` | 2 | 1 |  |
-| `PSPostProcessGlowNewFinalNightReinhard` | 2 | 1 |  |
-| `PSPostProcessGlowNight` | 4 | 2 |  |
-| `PSPostProcessNVG` | 3 | 2 | 17 |
-| `PSPostProcessThermal` | 2 | 2 |  |
-| `PSPostProcessThermalPresent` | 2 | 1 |  |
+### Blur and distortion (19)
 
-### Ambient occlusion (6)
-| entry point | tex | cb | instr |
-|---|--:|--:|--:|
-| `PSHDAO` | 1 | 1 |  |
-| `PSPostProcessSSAO` | 2 | 1 |  |
-| `PSPostProcessSSAODebug` | 1 | 0 |  |
-| `PSPostProcessSSAODown` | 1 | 0 |  |
-| `PSPostProcessSSAOFinal` | 1 | 0 |  |
-| `PSSSAO` | 1 | 1 |  |
+| entry point | stage | behaviour |
+|---|---|---|
+| `CSFilterX` | compute | ° reads 2 input targets; 18 texture reads. |
+| `CSFilterY` | compute | ° reads 2 input targets; 18 texture reads. |
+| `PSFilterX` | pixel | ° reads 2 input targets; 10 texture reads. |
+| `PSFilterY` | pixel | ° reads 2 input targets; 10 texture reads. |
+| `PSPostProcessGaussBlur` | pixel | ° reads 1 input target; iterative. |
+| `PSPostProcessGaussianBlurH` | pixel | ° reads 1 input target; 5 texture reads. |
+| `PSPostProcessGaussianBlurV` | pixel | ° reads 1 input target; 5 texture reads. |
+| `PSPostProcessRescaleBicubic` | pixel | ° reads 2 input targets; 6 texture reads. |
+| `PSPostProcessSharpen` | pixel | ° reads 1 input target; 17 texture reads. Anti-aliasing. |
+| `PsPpDynamicBlur` | pixel | ° reads 1 input target; 11 texture reads. Dynamic blur. |
+| `PsPpDynamicBlurFinal` | pixel | ° reads 2 input targets; 5 texture reads. |
+| `PsPpRadialBlur` | pixel | ° reads 1 input target; iterative. Radial blur. |
+| `PsPpRotBlur` | pixel | ° reads 2 input targets; 30 texture reads. |
+| `PsPpWetDistort` | pixel | ° reads 2 input targets; 6 texture reads. |
+| `VSPostProcessRescaleBicubic` | vertex | ° vertex stage, no texture input. |
+| `VsPpDynamicBlur` | vertex | ° vertex stage, no texture input. |
+| `VsPpDynamicBlurFinal` | vertex | ° vertex stage, no texture input. |
+| `VsPpRotBlur` | vertex | ° Rotational blur. |
+| `VsPpWetDistort` | vertex | ° Wet lens distortion. |
+
+### Weather and water (8)
+
+| entry point | stage | behaviour |
+|---|---|---|
+| `PSPostProcessCaustics` | pixel | ° reads 2 input targets. Caustics. |
+| `PSPostProcessRain3D` | pixel | ° reads 2 input targets. |
+| `PSPostProcessRainParticles` | pixel | ° reads 3 input targets. |
+| `PSRainOccluderGrowH` | pixel | ° reads 1 input target. |
+| `PSRainOccluderGrowV` | pixel | ° reads 1 input target. |
+| `PSRainRefractAdjust` | pixel | ° reads 1 input target. |
+| `VSPostProcessRain3D` | vertex | ° vertex stage, no texture input. |
+| `VSPostProcessRainParticles` | vertex | ° Rain. |
+
+### Vision modes (7)
+
+| entry point | stage | behaviour |
+|---|---|---|
+| `PSPostProcessGlowNewFinalNightFilmic` | pixel | ° reads 2 input targets. Bloom, eye adaptation. |
+| `PSPostProcessGlowNewFinalNightNone` | pixel | ° reads 2 input targets. Bloom, eye adaptation. |
+| `PSPostProcessGlowNewFinalNightReinhard` | pixel | ° reads 2 input targets. Bloom, eye adaptation. |
+| `PSPostProcessGlowNight` | pixel | ° reads 4 input targets. Night vision, eye adaptation. |
+| `PSPostProcessThermal` | pixel | ° reads 2 input targets. Thermal imaging. |
+| `PSPostProcessThermalPresent` | pixel | ° reads 2 input targets. Blur. |
+| `PsPpClrInversion` | pixel | ° reads 1 input target. Colour inversion. |
 
 ### Copy and resolve (7)
-| entry point | tex | cb | instr |
-|---|--:|--:|--:|
-| `PSCopy` | 1 | 0 |  |
-| `PSPostProcessCopy` | 1 | 0 |  |
-| `PSPostProcessCopyAlphaOne` | 1 | 0 |  |
-| `PSPostProcessCopyResolve` | 1 | 1 |  |
-| `PSPostProcessCopyResolveAlphaOne` | 1 | 1 |  |
-| `PSPostProcessDepthResolveFirstSample` | 1 | 0 |  |
-| `PSPostProcessDepthResolveMax` | 1 | 0 |  |
 
-### Debug and diagnostic (2)
-| entry point | tex | cb | instr |
-|---|--:|--:|--:|
-| `PSOcclusionQueryDebug` | 0 | 0 |  |
-| `PSPostProcessDiagDepthBuffer` | 1 | 1 |  |
+| entry point | stage | behaviour |
+|---|---|---|
+| `PSCopy` | pixel | ° reads 1 input target. |
+| `PSPostProcessCopy` | pixel | ° reads 1 input target. |
+| `PSPostProcessCopyAlphaOne` | pixel | ° reads 1 input target. |
+| `PSPostProcessCopyResolve` | pixel | ° reads 1 input target; iterative. |
+| `PSPostProcessCopyResolveAlphaOne` | pixel | ° reads 1 input target; iterative. |
+| `PSPostProcessDepthResolveFirstSample` | pixel | ° reads 1 input target. |
+| `PSPostProcessDepthResolveMax` | pixel | ° reads 1 input target; iterative. |
 
-### Other (33)
-| entry point | tex | cb | instr |
-|---|--:|--:|--:|
-| `PSPostProcessFilmGrainColor` | 2 | 1 |  |
-| `PSPostProcessFilmGrainMono` | 2 | 1 |  |
-| `PSPostProcessFisheye` | 1 | 1 |  |
-| `PSPostProcessGlow` | 4 | 2 |  |
-| `PSPostProcessGlowNewFinalFilmic` | 2 | 1 |  |
-| `PSPostProcessGlowNewFinalNone` | 2 | 1 |  |
-| `PSPostProcessGlowNewFinalReinhard` | 2 | 1 |  |
-| `PSPostProcessGlowNewQuery` | 0 | 0 |  |
-| `PSPostProcessQuery` | 2 | 0 |  |
-| `PSPostProcessRain3D` | 2 | 1 |  |
-| `PSPostProcessRainParticles` | 3 | 1 |  |
-| `PSPostProcessRescaleBicubic` | 2 | 1 |  |
-| `PSPostProcessSSSMHigh` | 2 | 2 |  |
-| `PSPostProcessSSSMLow` | 2 | 1 |  |
-| `PSPostProcessSSSMNormal` | 2 | 2 |  |
-| `PSPostProcessSSSMStencil` | 0 | 0 |  |
-| `PSPostProcessSSSMVeryHigh` | 2 | 2 |  |
-| `PSPostProcessSharpen` | 1 | 1 |  |
-| `PSPostProcessSimulWeather` | 1 | 0 |  |
-| `PSPostProcessSimulWeatherDepthDecimate` | 1 | 1 |  |
-| `PSPostProcessSimulWeatherDepthDecimateHorizontal` | 1 | 1 |  |
-| `PSPostProcessSimulWeatherDepthDecimateVertical` | 1 | 1 |  |
-| `PSPrepareSSDepthMap` | 1 | 1 |  |
-| `PSPrepareSSDepthMapFromDepthInfo` | 1 | 0 |  |
-| `PSPrepareSSSceneTexture` | 1 | 0 |  |
-| `PSRainOccluderGrowH` | 1 | 0 |  |
-| `PSRainOccluderGrowV` | 1 | 0 |  |
-| `PSRainRefractAdjust` | 1 | 1 |  |
-| `ProcessAndApplyPS` | 2 | 1 |  |
-| `PsFxaa3_11` | 1 | 1 |  |
-| `PsFxaa3_11Luma` | 1 | 0 |  |
-| `PsPpChromAber` | 1 | 1 |  |
-| `PsPpClrInversion` | 1 | 1 |  |
+### Debug and query (3)
 
+| entry point | stage | behaviour |
+|---|---|---|
+| `PSOcclusionQueryDebug` | pixel | ° pixel stage, no texture input. |
+| `PSPostProcessDiagDepthBuffer` | pixel | ° reads 1 input target. Bloom. |
+| `VSOcclusionQuery` | vertex | ° vertex stage, no texture input. |
 
+### Other (21)
+
+| entry point | stage | behaviour |
+|---|---|---|
+| `PSPostProcessFilmGrainColor` | pixel | ° reads 2 input targets. |
+| `PSPostProcessFilmGrainMono` | pixel | ° reads 2 input targets. |
+| `PSPostProcessFisheye` | pixel | ° reads 1 input target. Anti-aliasing. |
+| `PSPostProcessGlow` | pixel | ° reads 4 input targets. Bloom. |
+| `PSPostProcessGlowNewFinalFilmic` | pixel | ° reads 2 input targets. Bloom, eye adaptation. |
+| `PSPostProcessGlowNewFinalNVG` | pixel | ° reads 2 input targets. Bloom, eye adaptation. |
+| `PSPostProcessGlowNewFinalNone` | pixel | ° reads 2 input targets. Bloom, eye adaptation. |
+| `PSPostProcessGlowNewFinalReinhard` | pixel | ° reads 2 input targets. Bloom, eye adaptation. |
+| `PSPostProcessGlowNewQuery` | pixel | ° pixel stage, no texture input. |
+| `PSPostProcessNVG` | pixel | ° reads 3 input targets. Eye adaptation. |
+| `PSPostProcessQuery` | pixel | ° reads 2 input targets. |
+| `PSPostProcessSimulWeather` | pixel | ° reads 1 input target. |
+| `PSPostProcessSimulWeatherDepthDecimate` | pixel | ° reads 1 input target. |
+| `PSPostProcessSimulWeatherDepthDecimateHorizontal` | pixel | ° reads 1 input target. |
+| `PSPostProcessSimulWeatherDepthDecimateVertical` | pixel | ° reads 1 input target. |
+| `PSPrepareSSDepthMap` | pixel | ° reads 1 input target. Screen-space water reflection. |
+| `PSPrepareSSDepthMapFromDepthInfo` | pixel | ° reads 1 input target. |
+| `PSPrepareSSSceneTexture` | pixel | ° reads 1 input target. |
+| `ProcessAndApplyPS` | pixel | ° reads 3 input targets; 11 texture reads; iterative. |
+| `PsPpChromAber` | pixel | ° reads 1 input target; 3 texture reads. Chromatic aberration. |
+| `VSPostProcess` | vertex | ° vertex stage, no texture input. |
 
 ## Documented names versus compiled names
 
@@ -797,12 +861,14 @@ container's contents, not a sample of them.
 
 ## How the descriptions were derived
 
-93 of the 408 pixel shaders have an official description. The remaining 315
-were described by translating each shader out of its compiled form and reading
-the result, rather than by guessing from the name.
+93 of the 408 pixel shaders have an official description. The rest, and all of
+the post-process and vertex shaders, were described by translating each shader
+out of its compiled form and reading the result, rather than by guessing from
+the name.
 
-Each blob was converted from DXBC to SPIR-V and then to GLSL. All 408 converted
-without error. The translated code was then analysed for facts that survive
+Each blob was converted from DXBC to SPIR-V and then to GLSL. Everything
+converted without error: 408 pixel, 133 post-process, and 511 vertex shaders
+after deduplication, 1052 in total. The translated code was then analysed for facts that survive
 translation intact:
 
 - which texture units are read, and how each is addressed. A unit sampled at
