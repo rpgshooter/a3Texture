@@ -187,14 +187,15 @@ void main() {
     float specPower = uMatSpecularPower[matIndex];
     vec3 specColor = uMatSpecular[matIndex].rgb;
 
-    // Apply specular map if available
-    // SMDI format: R = specular, G = gloss/micro, B = macro, A = self-illumination/emissive
+    // SMDI, as the engine reads it: green scales the specular term and blue is
+    // the exponent, spec = green * pow(NdotH, blue * coefficient). Red and
+    // alpha are never sampled and sit at 255 in shipped textures, so taking
+    // emissive from alpha lit everything carrying a specular map.
     float textureEmissive = 0.0;
     if (uHasSpecularMap != 0) {
         vec4 specTex = texture(uSpecularMap, vTexCoord);
-        specColor *= specTex.r;
-        specPower = max(1.0, specPower * (0.5 + specTex.g));
-        textureEmissive = specTex.a;  // Alpha channel = self-illumination
+        specColor *= specTex.g;
+        specPower = max(1.0, specTex.b * specPower);
     }
 
     float spec = pow(max(dot(normal, halfDir), 0.0), specPower);
