@@ -605,7 +605,7 @@ translation method used for the object shaders.
 
 | entry point | stage | behaviour |
 |---|---|---|
-| `CSHDAO` | compute | ° compute stage, no texture input. |
+| `CSHDAO` | compute | ° 32×32 thread group; reads 1 texture; uses shared memory. |
 | `PSHDAO` | pixel | ° reads 1 input target; 9 texture reads. |
 | `PSPostProcessSSAO` | pixel | ° reads 2 input targets; 37 texture reads. Screen-space ambient occlusion. |
 | `PSPostProcessSSAOBlurHorz` | pixel | ° reads 1 input target; 7 texture reads. Screen-space ambient occlusion. |
@@ -665,10 +665,10 @@ translation method used for the object shaders.
 
 | entry point | stage | behaviour |
 |---|---|---|
-| `CSCalculateHistogramLum` | compute | ° reads 1 input target; iterative. |
-| `CSCalculateHistogramThermal` | compute | ° reads 1 input target; iterative. |
-| `CSComputeCDFFromHistogram` | compute | ° iterative. |
-| `CSMergeHistogram` | compute | ° iterative. |
+| `CSCalculateHistogramLum` | compute | ° 32×32 thread group; reads 1 texture; 1 storage buffer; uses shared memory; atomic accumulation; iterative. |
+| `CSCalculateHistogramThermal` | compute | ° 32×32 thread group; reads 1 texture; 1 storage buffer; uses shared memory; atomic accumulation; iterative. |
+| `CSComputeCDFFromHistogram` | compute | ° 1×1 thread group; 2 storage buffers; uses shared memory; iterative. |
+| `CSMergeHistogram` | compute | ° 128×1 thread group; 2 storage buffers; atomic accumulation; iterative. |
 | `PSPostProcessAssumedLuminance` | pixel | ° reads 2 input targets. |
 | `PSPostProcessAssumedLuminanceDirect` | pixel | ° reads 1 input target. |
 | `PSPostProcessColorsSimple` | pixel | ° reads 1 input target. |
@@ -688,8 +688,8 @@ translation method used for the object shaders.
 
 | entry point | stage | behaviour |
 |---|---|---|
-| `CSFilterX` | compute | ° reads 2 input targets; 18 texture reads. |
-| `CSFilterY` | compute | ° reads 2 input targets; 18 texture reads. |
+| `CSFilterX` | compute | ° 32×2 thread group; reads 2 textures; uses shared memory. |
+| `CSFilterY` | compute | ° 32×2 thread group; reads 2 textures; uses shared memory. |
 | `PSFilterX` | pixel | ° reads 2 input targets; 10 texture reads. |
 | `PSFilterY` | pixel | ° reads 2 input targets; 10 texture reads. |
 | `PSPostProcessGaussBlur` | pixel | ° reads 1 input target; iterative. |
@@ -778,6 +778,55 @@ translation method used for the object shaders.
 | `ProcessAndApplyPS` | pixel | ° reads 3 input targets; 11 texture reads; iterative. |
 | `PsPpChromAber` | pixel | ° reads 1 input target; 3 texture reads. Chromatic aberration. |
 | `VSPostProcess` | vertex | ° vertex stage, no texture input. |
+
+
+## Compute and geometry
+
+Six entry points sit outside the pixel, vertex and post-process containers, and
+seven more compute shaders live inside the post-process container. Together they
+are the only non-raster stages in the engine.
+
+### Automatic exposure
+
+Four compute shaders form one pipeline, and reading them in order shows how the
+engine sets exposure each frame.
+
+| stage | entry point | behaviour |
+|---|---|---|
+| 1 | `CSCalculateHistogramLum` | ° 32×32 thread group; reads 1 texture; 1 storage buffer; uses shared memory; atomic accumulation; iterative. |
+| 1 | `CSCalculateHistogramThermal` | ° 32×32 thread group; reads 1 texture; 1 storage buffer; uses shared memory; atomic accumulation; iterative. |
+| 2 | `CSMergeHistogram` | ° 128×1 thread group; 2 storage buffers; atomic accumulation; iterative. |
+| 3 | `CSComputeCDFFromHistogram` | ° 1×1 thread group; 2 storage buffers; uses shared memory; iterative. |
+
+A 32×32 group reads the scene and accumulates a luminance histogram into shared
+memory with atomics, one histogram per tile. `CSMergeHistogram` reduces the
+per-tile histograms into a single one across 128 threads. A single-thread pass
+then walks that histogram into a cumulative distribution, which is what the tone
+mapping reads. The thermal variant runs the same shape over the thermal image.
+
+### Other compute
+
+| entry point | container | behaviour |
+|---|---|---|
+| `CSHDAO` | post-process | ° 32×32 thread group; reads 1 texture; uses shared memory. |
+| `CSFilterX` | post-process | ° 32×2 thread group; reads 2 textures; uses shared memory. |
+| `CSFilterY` | post-process | ° 32×2 thread group; reads 2 textures; uses shared memory. |
+| `CSTestComputeShader` | compute | ° 1×1 thread group. |
+
+`CSTestComputeShader` binds nothing and compiles to eight lines. It is a build
+artefact rather than a working shader.
+
+### Geometry
+
+`GSSimulWeatherClouds` is the only geometry shader in the engine.
+
+| entry point | behaviour |
+|---|---|
+| `GSSimulWeatherClouds` | ° takes `triangles` in and emits a `triangle_strip` with `max_vertices = 3`; reads `gl_CullDistance` per input vertex and emits conditionally. |
+
+Emitting at most as many vertices as it receives means it amplifies nothing; it
+is a culling stage for volumetric cloud geometry, paired with the
+`VSSimulWeatherClouds` vertex shaders that sample the two cloud density volumes.
 
 ## Documented names versus compiled names
 
@@ -951,6 +1000,54 @@ nowhere in the documentation:
 engine is the one the documentation never mentions. The documented vertex list
 describes the specialists and omits the general case.
 
+
+## Material types
+
+The documentation lists 35 material types, each pairing a vertex shader with a
+pixel shader. Checked against the containers with the prefix-aware method:
+
+| half | resolves | of 35 |
+|---|--:|--:|
+| pixel shader | 29 | 35 |
+| vertex shader | 1 | 35 |
+| both | 1 | 35 |
+
+**The vertex shader column is not real.** Exactly one material type, the water
+one, names a vertex shader that exists. The other 34 name things like `Basic`,
+`NormalMap` or `Super`, none of which is a vertex entry point; `NormalMap` and
+`Super` are pixel shaders, and `Basic` does not exist at all.
+
+This is consistent with how the vertex stage actually works. Nearly all vertex
+processing goes through `VSShaderPool`, selected by permutation rather than by
+name, so there is nothing for a material to point at. The vertex shader field in
+a material type does not choose a vertex shader.
+
+The pixel half is mostly sound. 29 of 35 resolve, though 10 of those only
+resolve once the lighting-model prefix is applied:
+
+| named in the material type | actually compiled as |
+|---|---|
+| `NormalMapDiffuse` | `PSSpecularNormalMapDiffuse` |
+| `NormalMapThrough` | `PSSpecularNormalMapThrough` |
+| `NormalMapThroughSimple` | `PSSpecularNormalMapThroughSimple` |
+| `NormalMapSpecularThrough` | `PSSpecularNormalMapSpecularThrough` |
+| `NormalMapSpecularThroughSimple` | `PSSpecularNormalMapSpecularThroughSimple` |
+| `NormalMapDiffuseMacroAS` | `PSSpecularNormalMapDiffuseMacroAS` |
+
+### Material types with no pixel shader (6)
+
+| material type | pixel shader named |
+|---|---|
+| General material | `Normal` |
+| Basic detail map | `Detail` |
+| Basic glass | `AlphaShadow` |
+| Detail macro AS | `DetailMacroAS` |
+| Antiwater | `AlphaNoShadow` |
+| Tree | `TreeNoFade` |
+
+These are the same names the pixel shader check found absent, so the material
+types built on them cannot work as described.
+
 ## How the absence claims were validated
 
 Absence is easy to claim and easy to get wrong, so the negative results above
@@ -990,8 +1087,9 @@ out of its compiled form and reading the result, rather than by guessing from
 the name.
 
 Each blob was converted from DXBC to SPIR-V and then to GLSL. Everything
-converted without error: 408 pixel, 133 post-process, and 511 vertex shaders
-after deduplication, 1052 in total. The translated code was then analysed for facts that survive
+converted without error: 408 pixel, 133 post-process, 511 vertex after
+deduplication, 5 compute and 1 geometry, 1058 in total. That is every shader in
+every container. The translated code was then analysed for facts that survive
 translation intact:
 
 - which texture units are read, and how each is addressed. A unit sampled at
