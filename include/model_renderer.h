@@ -118,6 +118,12 @@ public:
 	void SetDefaultMaterial(const MaterialProperties& material) {
 		m_DefaultMaterial = material;
 	}
+
+	// Approximates the family a PixelShaderID belongs to. The engine's shaders
+	// are not available here, so this only makes the families look different.
+	enum class ShaderStyle { Super = 0, Basic = 1, Glass = 2, Foliage = 3, Unlit = 4 };
+	void SetShaderStyle(ShaderStyle style) { m_ShaderStyle = static_cast<int>(style); }
+	static ShaderStyle StyleForPixelShader(const std::string& pixelShaderID);
 	bool LoadNormalTexture(const std::string& path);
 	bool LoadSpecularTexture(const std::string& path);
 	void ClearAllTextures();
@@ -242,6 +248,8 @@ private:
 
 	// Default material properties
 	MaterialProperties m_DefaultMaterial;
+	int m_ShaderStyle = 0;
+	GLint m_LocShaderStyle = -1;
 
 	// Multi-texture slot system
 	std::vector<TextureSlot> m_TextureSlots;

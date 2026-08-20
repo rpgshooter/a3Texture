@@ -100,6 +100,16 @@ uniform int uTextureCount;        // Number of active textures
 uniform int uHasNormalMap;
 uniform int uHasSpecularMap;
 
+// Which family of Arma shader this material asks for. The engine's own
+// shaders are not available here, so these are approximations that make the
+// families read differently rather than match the game.
+#define STYLE_SUPER 0
+#define STYLE_BASIC 1
+#define STYLE_GLASS 2
+#define STYLE_FOLIAGE 3
+#define STYLE_UNLIT 4
+uniform int uShaderStyle;
+
 // Material properties loaded from RVMAT files, one entry per texture slot so
 // a model carrying several materials shades each section with its own.
 uniform vec4 uMatAmbient[16];
@@ -157,7 +167,8 @@ void main() {
     if (gl_FrontFacing) normal = -normal;
 
     // Apply normal map if available using proper tangent-space transformation
-    if (uHasNormalMap != 0) {
+    // The simpler families do not carry a normal map at all.
+    if (uHasNormalMap != 0 && uShaderStyle != STYLE_BASIC && uShaderStyle != STYLE_UNLIT) {
         vec3 viewDir = normalize(vWorldPos - uViewPos);
         normal = perturbNormal(normal, viewDir, vTexCoord);
     }
@@ -249,9 +260,37 @@ void main() {
         emissiveColor *= 1.0 + (emissiveIntensity - 0.5) * 0.5;  // Subtle bloom
     }
 
+    float alpha = baseColor.a;
+
+    if (uShaderStyle == STYLE_BASIC) {
+        // Diffuse modulate, no environment term.
+        envReflection = vec3(0.0);
+        specularLight *= 0.35;
+    } else if (uShaderStyle == STYLE_GLASS) {
+        // Thin and reflective: the rim carries it rather than the surface.
+        float rim = pow(1.0 - abs(dot(normal, normalize(uViewPos - vWorldPos))), 3.0);
+        envReflection *= 2.5;
+        specularLight *= 2.0;
+        diffuseLight *= 0.25;
+        alpha = clamp(alpha * (0.25 + rim), 0.0, 1.0);
+    } else if (uShaderStyle == STYLE_FOLIAGE) {
+        // Lit largely by ambient, barely shiny, and cut out rather than blended.
+        ambientLight *= 1.6;
+        specularLight *= 0.15;
+        envReflection = vec3(0.0);
+        if (alpha < 0.5) discard;
+        alpha = 1.0;
+    } else if (uShaderStyle == STYLE_UNLIT) {
+        // Reticles and screens ignore scene lighting entirely.
+        ambientLight = vec3(1.0);
+        diffuseLight = vec3(0.0);
+        specularLight = vec3(0.0);
+        envReflection = vec3(0.0);
+    }
+
     vec3 result = (ambientLight + diffuseLight + specularLight) * color + emissiveColor + envReflection;
 
-    FragColor = vec4(result, baseColor.a);
+    FragColor = vec4(result, alpha);
 }
 )";
 
@@ -457,6 +496,7 @@ bool ModelRenderer::CreateShaders() {
 	m_LocMatSpecular = glGetUniformLocation(m_ShaderProgram, "uMatSpecular");
 	m_LocMatEmissive = glGetUniformLocation(m_ShaderProgram, "uMatEmissive");
 	m_LocMatSpecularPower = glGetUniformLocation(m_ShaderProgram, "uMatSpecularPower");
+	m_LocShaderStyle = glGetUniformLocation(m_ShaderProgram, "uShaderStyle");
 
 	return true;
 }
@@ -1279,6 +1319,7 @@ void ModelRenderer::Render() {
 	glUniform4fv(m_LocMatSpecular, MAX_TEXTURE_SLOTS, specular);
 	glUniform4fv(m_LocMatEmissive, MAX_TEXTURE_SLOTS, emissive);
 	glUniform1fv(m_LocMatSpecularPower, MAX_TEXTURE_SLOTS, specularPower);
+	glUniform1i(m_LocShaderStyle, m_ShaderStyle);
 
 	// Bind all active texture slots to texture units 0-15
 	// Each slot gets its own texture unit for per-vertex texture indexing
@@ -2088,6 +2129,34 @@ void ModelRenderer::ClearTextureSlots() {
 
 /// Returns the material properties for the currently active texture slot.
 /// Falls back to default material if no RVMAT is loaded.
+// Grouped by what the wiki says each shader does, since the families differ
+// far more from each other than the members differ within one.
+ModelRenderer::ShaderStyle ModelRenderer::StyleForPixelShader(const std::string& pixelShaderID) {
+	std::string id = pixelShaderID;
+	std::transform(id.begin(), id.end(), id.begin(), ::tolower);
+
+	const auto has = [&id](const char* needle) {
+		return id.find(needle) != std::string::npos;
+	};
+
+	if (has("collimator") || has("alphaonly") || has("point") || has("star")) {
+		return ShaderStyle::Unlit;
+	}
+	if (has("glass") || has("refract") || has("water")) {
+		return ShaderStyle::Glass;
+	}
+	if (has("tree") || has("grass") || has("crown") || has("leaf")) {
+		return ShaderStyle::Foliage;
+	}
+	// The families with no normal map stage of their own.
+	if (id == "normal" || id == "normaldxta" || id == "white" || id == "whitealpha" ||
+		id == "detail" || id == "interpolation" || id == "dummy0") {
+		return ShaderStyle::Basic;
+	}
+
+	return ShaderStyle::Super;
+}
+
 const MaterialProperties& ModelRenderer::GetActiveMaterial() const {
 	// Return material from first active texture slot that has RVMAT
 	for (const auto& slot : m_TextureSlots) {

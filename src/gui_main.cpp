@@ -1842,6 +1842,9 @@ private:
             renderer.SetDefaultMaterial(properties);
         }
 
+        renderer.SetShaderStyle(
+            arma3::ModelRenderer::StyleForPixelShader(material.pixelShaderID));
+
         applyStageTexture(1, appliedNormal, true);
         applyStageTexture(5, appliedSpecular, false);
 
