@@ -695,9 +695,23 @@ alone finds nothing even though the shader exists.
 
 ### No compiled shader (49)
 
-These 49 have no entry point under any prefix. The `Terrain1` through `Terrain14`
-run is the clearest case: only `Terrain15` is compiled, so every layer count
-below fifteen resolves to the same shader rather than a per-count variant.
+Each of these was searched for directly in the raw bytes of all nine shader
+containers, as a whole token, under every prefix the engine uses. None occurs.
+See the validation note below for the method.
+
+42 of the 49 are the `Terrain`, `TerrainGrass` and `TerrainSimple` runs from 1
+to 14. For each of those three families only the `15` variant is compiled,
+alongside a variable-layer `X` form (`PSTerrainX`, `PSTerrainSimpleX`,
+`PSTerrainGrassX`) and `SNX` and `NoDetail` variants. So a layer count below
+fifteen is served by the `X` shader or by the `15` one, never by a shader named
+for that count.
+
+The remaining seven divide in two. `AlphaNoShadow`, `AlphaShadow`, `Dummy0` and
+`NormalMapThroughLowEnd` do not occur anywhere in any container, even as a
+substring, and appear to be retired. `Normal`, `Detail` and `DetailMacroAS`
+occur only inside longer names such as `PSNormalMap` and
+`PSNormalMapDetailMacroASSpecularMap`; there is no standalone shader by those
+names, so the documented bare IDs have nothing behind them.
 
 | documented ID | description |
 |---|---|
@@ -750,3 +764,34 @@ below fifteen resolves to the same shader rather than a per-count variant.
 | `TerrainSimple7` | terrainSimple - X layers |
 | `TerrainSimple8` | terrainSimple - X layers |
 | `TerrainSimple9` | terrainSimple - X layers |
+
+
+## How the absence claims were validated
+
+Absence is easy to claim and easy to get wrong, so the negative results above
+were tested rather than inferred.
+
+Entry points are stored in the containers with a stage prefix: the shader the
+documentation calls `Super` is stored as `PSSuper`, and `ShaderPool` as
+`VSShaderPool`. A search for the documented name alone finds nothing for almost
+every shader in the set, which produces a convincing and completely wrong list
+of missing shaders. The first run of this check did exactly that and reported
+all 49 as absent for the wrong reason.
+
+The method that produced the results above:
+
+- all nine `.shdc` containers extracted and searched as raw bytes, rather than
+  searching a name list derived from an earlier pass
+- matches required to be whole tokens, so `Terrain1` does not match inside
+  `Terrain15`
+- every candidate tried under each stage prefix and bare
+- a positive control of seven names known to exist (`Super`, `NormalMap`,
+  `Terrain15`, `Glass`, `Water`, `SpecularNormalMapThrough`, `ShaderPool`), all
+  of which were found
+- a negative control of invented names (`ZZZNotAShader`, `Terrain99`), none of
+  which were found
+
+As a completeness check on the reference as a whole, the pixel shader container
+yields 556 distinct `PS*` tokens. 148 are constant buffer and sampler names,
+leaving 408 entry points, and all 408 appear in this document. The list is the
+container's contents, not a sample of them.
