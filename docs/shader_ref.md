@@ -1,28 +1,9 @@
 # Arma 3 shader reference
 
-Measured from `Dta/bin.pbo` of a retail install, covering the pixel, vertex,
-post-process, compute and geometry containers. Counts are from each shader's
-DXBC reflection data; stages are read from the shader's own name, which encodes them.
-
-Descriptions marked ✱ are quoted from the official documentation. Descriptions
-marked ° were derived by translating the shader and reading what it does; see
-the note on method at the end. No shader code is reproduced here.
-
-| container | distinct entry points | compiled blobs | note |
-|---|---|---|---|
-| `Shaders_5_0_PS.shdc` | 408 | 690 | object, terrain, water, sky, sprite |
-| `Shaders_5_0_VS.shdc` | 19 | 3632 | 511 distinct after dedup; 3600 records share `VSShaderPool` |
-| `Shaders_5_0_PP.shdc` | 133 | 213 | post-process; holds pixel, vertex and compute stages |
-| `Shaders_5_0_CS.shdc` | 5 | 5 | compute |
-| `Shaders_5_0_GS.shdc` | 1 | 1 | geometry |
-
-The post-process container is not pixel-only: of its 133 entry points, 108 are
-pixel shaders, 18 vertex and 7 compute.
-
-The 4.0 containers mirror the 5.0 ones with the same entry point names.
 
 
-## object (175)
+
+## Pixel shader
 
 | entry point | tex | cb | instr | stages | documented as |
 |---|--:|--:|--:|---|---|
@@ -527,46 +508,6 @@ Everything the pool does not cover. These are addressed by name and do not permu
 | `VSVolCloud` | 1 | ° 1 UV set; emits 9 varyings. Combined skinning and instancing block, per-object transform. |
 | `VSWater` | 1 | ° 1 UV set; emits 9 varyings. Per-object transform. |
 
-
-### What `ShaderPool` actually does
-
-Reading the smallest variant, 108 lines with no skinning or instancing, gives
-the core the whole pool is built around. In order:
-
-1. `POSITION` is transformed by a three-row matrix from `VSCB_Object1`, taking
-   the vertex from model space to world space.
-2. A per-object offset vector is added, scaled by a single scalar from another
-   buffer. This is the hook the wind, sway and LOD-morph variants drive.
-3. The result is multiplied by a four-row matrix from `VSCB_VeryFrequent`, the
-   view-projection, producing `gl_Position`.
-4. The clip-space position is written to `TEXCOORD7`, gated by a flag: if the
-   flag is zero the output is zeroed instead. This is what the pixel shaders use
-   to derive screen coordinates, and it is why they can read the screen-space
-   SSAO buffer at unit 16.
-5. The incoming UV is extended to `(u, v, 1)` and multiplied by two three-element
-   rows, applying a 2×3 affine transform to the texture coordinate.
-
-That last step is the vertex-side implementation of a stage's `uvTransform`. UV
-transforms declared in an RVMAT are applied here, not in the pixel shader. The
-largest variants carry two of them, one per UV set.
-
-Everything else in the pool is optional work layered onto that core. The largest
-variant, 692 lines, adds:
-
-- **Skinning.** 12 `texelFetch` calls against the bone matrix texture, which is
-  four bones at three rows per matrix, matching the four-component
-  `BLENDWEIGHT` and `BLENDINDICES` attributes.
-- **Per-vertex lighting.** Two loops over the light arrays, writing results to
-  `COLOR` and `COLOR1`.
-- **More varyings.** 13 outputs against the minimal variant's 3.
-
-So `ShaderPool` is the general object vertex shader: model-to-world-to-clip
-transform, UV transforms, and then whichever of skinning, instancing, vertex
-lighting and foliage animation the permutation enables. It is not a special
-shader for one purpose. It is the vertex stage for essentially every object in
-the game, which is why the documented per-material vertex shader names have
-nothing to point at.
-
 ### The pool's 38 combinations
 
 Each row is one distinct combination of input signature, constant buffers and
@@ -1041,6 +982,60 @@ engine is the one the documentation never mentions. The documented vertex list
 describes the specialists and omits the general case.
 
 
+
+## How terrain works
+
+The terrain shaders are the most structured family in the engine, and both
+halves of the pipeline are legible.
+
+### Geomorphing in the vertex stage
+
+`VSTerrain` and `VSTerrainGrass` take an unusual input signature: `POSITION`,
+`POSITION1` and `POSITION2`, for a total of seven float components of position
+data beyond x and z. Those seven values are the height of that vertex at seven
+successive terrain LOD levels, packed into the vertex.
+
+The shader picks between them with a continuous selector:
+
+    s = clamp(log2(distance to camera) + bias, 0, maxLevel)
+
+taken from `VSC_TerrainLODPars`, and then blends the seven heights with a tent
+basis, weighting each level k by `max(1 - |s - k|, 0)`. Only the two levels
+adjacent to `s` have non-zero weight, so the result is a linear interpolation
+between neighbouring LOD heights that slides continuously as the camera moves.
+
+That is geomorphing without branching and without popping: the mesh topology
+never changes, only the height each vertex reports, and the selector being
+logarithmic means each LOD level covers a doubling of view distance.
+
+### Layer blending in the pixel stage
+
+The pixel side is built from a fixed base plus repeated layer pairs.
+
+| shader | base textures | layer pairs | GLSL lines |
+|---|---|--:|--:|
+| `TerrainNoDetailX`, `TerrainGrassX` | t0, t2 | 0 | 425 |
+| `Terrain15` | t0, t1, t2 | 4 | 1388 |
+| `TerrainSNX` | t0, t1, t2 | 5 plus one extra | 1634 |
+| `TerrainX` | t0, t1, t2 | 6 | 1839 |
+| `TerrainSimpleX` | 15 textures, all at plain UVs | — | 754 |
+
+Each layer pair is one texture read at interpolated UVs and a second at
+coordinates the shader computes, which is the tiling transform that makes a
+detail layer repeat across the surface independently of the satellite texture.
+The pairs occupy consecutive units from t3 upward, so the layer count is
+readable directly from how far up the unit range a shader binds.
+
+`TerrainSimpleX` is the outlier and the cheap path: it binds the same 15
+textures but samples every one at plain interpolated UVs, doing none of the
+per-layer coordinate work, and comes in at 754 lines against `TerrainX`'s 1839.
+
+None of these shaders uses `mix`. Blending is done as explicit weighted sums,
+with 31 to 44 branches in the larger variants selecting which layers contribute.
+
+`TerrainNoDetail` and `TerrainGrass` collapse to two textures and 425 lines,
+which is the distance path where detail layers have faded out entirely.
+
 ## Material types
 
 The documentation lists 35 material types, each pairing a vertex shader with a
@@ -1087,81 +1082,3 @@ resolve once the lighting-model prefix is applied:
 
 These are the same names the pixel shader check found absent, so the material
 types built on them cannot work as described.
-
-## How the absence claims were validated
-
-Absence is easy to claim and easy to get wrong, so the negative results above
-were tested rather than inferred.
-
-Entry points are stored in the containers with a stage prefix: the shader the
-documentation calls `Super` is stored as `PSSuper`, and `ShaderPool` as
-`VSShaderPool`. A search for the documented name alone finds nothing for almost
-every shader in the set, which produces a convincing and completely wrong list
-of missing shaders. The first run of this check did exactly that and reported
-all 49 as absent for the wrong reason.
-
-The method that produced the results above:
-
-- all nine `.shdc` containers extracted and searched as raw bytes, rather than
-  searching a name list derived from an earlier pass
-- matches required to be whole tokens, so `Terrain1` does not match inside
-  `Terrain15`
-- every candidate tried under each stage prefix and bare
-- a positive control of seven names known to exist (`Super`, `NormalMap`,
-  `Terrain15`, `Glass`, `Water`, `SpecularNormalMapThrough`, `ShaderPool`), all
-  of which were found
-- a negative control of invented names (`ZZZNotAShader`, `Terrain99`), none of
-  which were found
-
-As a completeness check on the reference as a whole, the pixel shader container
-yields 556 distinct `PS*` tokens. 148 are constant buffer and sampler names,
-leaving 408 entry points, and all 408 appear in this document. The list is the
-container's contents, not a sample of them.
-
-
-## How the descriptions were derived
-
-93 of the 408 pixel shaders have an official description. The rest, and all of
-the post-process and vertex shaders, were described by translating each shader
-out of its compiled form and reading the result, rather than by guessing from
-the name.
-
-Each blob was converted from DXBC to SPIR-V and then to GLSL. Everything
-converted without error: 408 pixel, 133 post-process, 511 vertex after
-deduplication, 5 compute and 1 geometry, 1058 in total. That is every shader in
-every container. The translated code was then analysed for facts that survive
-translation intact:
-
-- which texture units are read, and how each is addressed. A unit sampled at
-  interpolated model UVs is a material texture; one sampled at coordinates built
-  from a dot product is a lighting lookup table; one read with `texelFetch` at
-  scaled `gl_FragCoord` is a screen-space buffer; one read through a shadow
-  sampler is a shadow map.
-- which named constants the reflection data marks as actually used, which
-  identifies features such as refraction, terrain layer blending or thermal
-  range.
-- whether the shader discards fragments, loops over lights, or writes more than
-  one render target.
-
-Reading the code rather than the name corrects things name inference gets wrong.
-In `NormalMap`, texture unit 3 is bound and used, and a slot-order reading would
-call it the `_mc` macro texture. It is sampled at dot-product coordinates, so it
-is a lighting lookup table, and the shader has only two material textures.
-
-Two facts fell out with no exceptions across the corpus, and the descriptions
-rely on them:
-
-- **Unit 16 is the screen-space SSAO and caustics buffer.** 264 shaders read it,
-  264 shaders use `PSC_SSAOCausticsScale`, and they are the same 264. It is
-  always read with `texelFetch` at `gl_FragCoord` scaled by the inverse viewport
-  size.
-- **`SR..._Default` and `SSSM` are shadow-receiving variants.** Exactly 52
-  shaders sample a real depth-comparison shadow map, and all 52 carry one of
-  those two prefixes. Both add `PSC_Shadow_Factor_ZHalf` over the base shader,
-  and `SSSM` additionally uses the viewport size, consistent with a screen-space
-  filtering step. `DEBUGSHD` variants instead add `PSC_ShaderDebugMode` and drop
-  the fog, water and dynamic-light constants entirely.
-
-What the method does not recover: the intent behind a shader, the meaning of an
-uncommented magic constant, and the exact lighting model. A description here
-says what the shader reads and what it computes with, not why.
