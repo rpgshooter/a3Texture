@@ -764,8 +764,21 @@ translation method used for the object shaders.
 ## Compute and geometry
 
 Six entry points sit outside the pixel, vertex and post-process containers, and
-seven more compute shaders live inside the post-process container. Together they
-are the only non-raster stages in the engine.
+seven more compute shaders live inside the post-process container. Four of those
+appear in both places, so there are **8 distinct compute shaders** and one
+geometry shader in the whole engine.
+
+That is a strikingly small amount of compute, and the reason is visible in what
+the eight are. Three of them duplicate a pixel shader that also exists:
+`CSFilterX`, `CSFilterY` and `CSHDAO` sit alongside `PSFilterX`, `PSFilterY` and
+`PSHDAO`. One, `CSTestComputeShader`, does nothing. The remaining four are the
+exposure pipeline, and they are the only work in the engine that a pixel shader
+genuinely cannot express: accumulating a histogram needs scattered atomic writes
+and a reduction into a buffer, which the raster pipeline has no way to do.
+
+So compute is not used as a general-purpose tool here. It is used in the one
+place the raster path cannot reach, with a few optional alternatives kept beside
+their pixel originals.
 
 ### Automatic exposure
 
@@ -795,7 +808,9 @@ mapping reads. The thermal variant runs the same shape over the thermal image.
 | `CSTestComputeShader` | compute | ° 1×1 thread group. |
 
 `CSTestComputeShader` binds nothing and compiles to eight lines. It is a build
-artefact rather than a working shader.
+artefact rather than a working shader. `CSHDAO`, `CSFilterX` and `CSFilterY`
+each have a pixel-shader counterpart in the same container, so none of the three
+is the only way that effect can run.
 
 ### Geometry
 
