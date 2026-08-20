@@ -8,6 +8,8 @@
 #include <sstream>
 #include <stdexcept>
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <mutex>
 #include <thread>
 #include <atomic>
@@ -34,6 +36,27 @@ size_t dxtDataSize(PAAFormat format, uint32_t width, uint32_t height) {
 
 // BIS compresses mipmaps wider than 128px and stores the rest raw.
 constexpr uint32_t kLzoMinWidth = 128;
+
+// Colour is stored gamma encoded, so averaging it directly darkens each level.
+// Retail mip chains match a linear average far more closely, by a wide margin
+// on high contrast areas, so the colour channels are converted before
+// averaging and back afterwards. Alpha carries data rather than colour and is
+// averaged as it is.
+const std::array<float, 256>& srgbToLinear() {
+    static const std::array<float, 256> table = [] {
+        std::array<float, 256> values{};
+        for (int i = 0; i < 256; i++) {
+            values[i] = std::pow(i / 255.0f, 2.2f);
+        }
+        return values;
+    }();
+    return table;
+}
+
+uint8_t linearToSrgb(float value) {
+    const float encoded = std::pow(std::clamp(value, 0.0f, 1.0f), 1.0f / 2.2f);
+    return static_cast<uint8_t>(encoded * 255.0f + 0.5f);
+}
 
 template <typename Fn>
 void parallelFor(size_t count, unsigned limit, Fn&& fn) {
@@ -256,21 +279,30 @@ void PAA::calculateMipmapsAndTaggs() {
         mipmap.height = newHeight;
         mipmap.data.resize(newWidth * newHeight * 4);
 
-        // Simple bilinear downsampling
+        // Box filter, averaging colour in linear space.
         const auto& srcData = generatedMips.back().data;
+        const auto& toLinear = srgbToLinear();
+
         for (uint32_t y = 0; y < newHeight; y++) {
             for (uint32_t x = 0; x < newWidth; x++) {
-                uint32_t sx = x * 2;
-                uint32_t sy = y * 2;
+                const uint32_t sx = x * 2;
+                const uint32_t sy = y * 2;
 
-                for (int c = 0; c < 4; c++) {
-                    uint32_t p1 = srcData[(sy * curWidth + sx) * 4 + c];
-                    uint32_t p2 = srcData[(sy * curWidth + sx + 1) * 4 + c];
-                    uint32_t p3 = srcData[((sy + 1) * curWidth + sx) * 4 + c];
-                    uint32_t p4 = srcData[((sy + 1) * curWidth + sx + 1) * 4 + c];
+                const size_t p1 = (size_t(sy) * curWidth + sx) * 4;
+                const size_t p2 = (size_t(sy) * curWidth + sx + 1) * 4;
+                const size_t p3 = (size_t(sy + 1) * curWidth + sx) * 4;
+                const size_t p4 = (size_t(sy + 1) * curWidth + sx + 1) * 4;
+                const size_t out = (size_t(y) * newWidth + x) * 4;
 
-                    mipmap.data[(y * newWidth + x) * 4 + c] = (p1 + p2 + p3 + p4) / 4;
+                for (int c = 0; c < 3; c++) {
+                    const float sum = toLinear[srcData[p1 + c]] + toLinear[srcData[p2 + c]] +
+                                      toLinear[srcData[p3 + c]] + toLinear[srcData[p4 + c]];
+                    mipmap.data[out + c] = linearToSrgb(sum * 0.25f);
                 }
+
+                const uint32_t alpha = srcData[p1 + 3] + srcData[p2 + 3] +
+                                       srcData[p3 + 3] + srcData[p4 + 3];
+                mipmap.data[out + 3] = static_cast<uint8_t>(alpha / 4);
             }
         }
 
