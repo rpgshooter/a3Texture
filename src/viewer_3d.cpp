@@ -1,11 +1,3 @@
-/**
- * @file viewer_3d.cpp
- * @brief Mesh loading and P3D/OBJ conversion utilities for 3D preview
- * @author Eathan McLeod-Lucas
- *
- * Part of A3 Studio - Arma 3 Modding IDE
- */
-
 #include "../include/viewer_3d.h"
 
 #include <algorithm>

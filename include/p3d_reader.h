@@ -1,11 +1,4 @@
 #pragma once
-/**
- * @file p3d_reader.hpp
- * @brief P3D file reader supporting both MLOD and ODOL formats
- * @author Eathan McLeod-Lucas
- *
- * Part of A3 Studio - Arma 3 Modding IDE
- */
 
 #include "binary_reader.h"
 

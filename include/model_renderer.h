@@ -1,11 +1,4 @@
 #pragma once
-/**
- * @file renderer.hpp
- * @brief 3D model renderer with proper depth buffer handling
- * @author Eathan McLeod-Lucas
- *
- * Part of A3 Studio - Arma 3 Modding IDE
- */
 
 #include <glad/glad.h>
 

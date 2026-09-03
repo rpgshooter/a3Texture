@@ -1,8 +1,3 @@
-/**
- * @file p3d_reader.cpp
- * @brief P3D file reader implementation
- */
-
 #include "../include/p3d_reader.h"
 
 #include <cstring>

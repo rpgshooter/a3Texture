@@ -1,11 +1,3 @@
-/**
- * @file rvmat_parser.cpp
- * @brief Parser and serializer for RVMAT material definition files
- * @author Eathan McLeod-Lucas
- *
- * Part of A3 Studio - Arma 3 Modding IDE
- */
-
 #include "../include/rvmat_parser.h"
 
 #include <algorithm>

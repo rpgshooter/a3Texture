@@ -1,11 +1,3 @@
-/**
- * @file renderer.cpp
- * @brief OpenGL-based 3D model renderer for P3D visualization
- * @author Eathan McLeod-Lucas
- *
- * Part of A3 Studio - Arma 3 Modding IDE
- */
-
 #include "../include/model_renderer.h"
 
 #include "../include/paa_texture.h"

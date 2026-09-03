@@ -1,7 +1,5 @@
 #pragma once
 
-// Generated from the RVMAT basics page on the Bohemia wiki.
-
 #include <string>
 #include <vector>
 

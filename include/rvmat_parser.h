@@ -1,11 +1,4 @@
 #pragma once
-/**
- * @file rvmat_parser.h
- * @brief RVMAT material file parser and serializer
- * @author Eathan McLeod-Lucas
- *
- * Part of A3 Studio - Arma 3 Modding IDE
- */
 
 #include <array>
 #include <filesystem>

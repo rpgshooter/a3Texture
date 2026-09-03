@@ -1,11 +1,4 @@
 #pragma once
-/**
- * @file viewer_3d.hpp
- * @brief Mesh data structures and P3D/OBJ loading utilities for 3D preview
- * @author Eathan McLeod-Lucas
- *
- * Part of A3 Studio - Arma 3 Modding IDE
- */
 
 #include "p3d_reader.h"
 
