@@ -21,9 +21,9 @@
 #include <map>
 
 namespace fs = std::filesystem;
-
+//TODO: main.cpp, line 24, should probably rework this stupid std::cout spam
 void printUsage(const char* programName) {
-    std::cout << "Arma 3 PAA Converter - Native C++ Edition\n";
+    std::cout << "A3Texture \n";
     std::cout << "==========================================\n\n";
     std::cout << "Usage:\n";
     std::cout << "  " << programName << " <input> <output> [options]\n\n";
@@ -328,7 +328,7 @@ bool parseSlotSpec(const std::string& text, SlotSpec& out) {
 
 
 a3tex::PAAFormat parseFormat(std::string value) {
-    std::transform(value.begin(), value.end(), value.begin(), ::toupper);
+    std::ranges::transform(value, value.begin(), ::toupper);
     if (value == "DXT1") return a3tex::PAAFormat::DXT1;
     if (value == "DXT5") return a3tex::PAAFormat::DXT5;
     return a3tex::PAAFormat::UNKNOWN;
@@ -448,7 +448,7 @@ int runSpec(int argc, char** argv) {
                 std::cerr << entry.output << ": unknown preset " << entry.presetName << "\n";
                 return 1;
             }
-            if (int(entry.files.size()) != preset->sourceCount) {
+            if (static_cast<int>(entry.files.size()) != preset->sourceCount) {
                 std::cerr << entry.output << ": preset " << entry.presetName << " needs "
                           << preset->sourceCount << " source(s)\n";
                 return 1;
@@ -460,7 +460,7 @@ int runSpec(int argc, char** argv) {
             for (size_t i = 0; i < entry.files.size(); i++) {
                 job.sources.push_back(resolve(entry.files[i]).string());
                 for (auto& slot : job.slots) {
-                    if (slot.source != int(i)) continue;
+                    if (slot.source != static_cast<int>(i)) continue;
                     if (entry.hasChannel[i]) slot.channel = entry.channels[i];
                     if (entry.inverts[i]) slot.invert = true;
                 }
@@ -519,7 +519,7 @@ int runPack(int argc, char** argv) {
             }
         }
         else if (arg == "--source" && i + 1 < argc) {
-            sourceSpecs.push_back(argv[++i]);
+            sourceSpecs.emplace_back(argv[++i]);
         }
         else if (arg == "--resolution" && i + 1 < argc) {
             std::string value = argv[++i];
@@ -575,7 +575,7 @@ int runPack(int argc, char** argv) {
             (void)channel;
 
             if (!spec.set) {
-                freeSlots[c] = {-1, a3tex::PackChannel::R, uint8_t(c == 3 ? 255 : 0), false};
+                freeSlots[c] = {-1, a3tex::PackChannel::R, static_cast<uint8_t>(c == 3 ? 255 : 0), false};
                 continue;
             }
 
@@ -587,7 +587,7 @@ int runPack(int argc, char** argv) {
             auto it = loaded.find(spec.file);
             if (it == loaded.end()) {
                 ordered.push_back(spec.file);
-                it = loaded.emplace(spec.file, int(ordered.size()) - 1).first;
+                it = loaded.emplace(spec.file, static_cast<int>(ordered.size()) - 1).first;
             }
             freeSlots[c] = {it->second, spec.channel, 0, spec.invert};
         }
@@ -615,7 +615,7 @@ int runPack(int argc, char** argv) {
         return 0;
     }
 
-    if (int(sourceSpecs.size()) != preset->sourceCount) {
+    if (static_cast<int>(sourceSpecs.size()) != preset->sourceCount) {
         std::cerr << "Preset " << preset->name << " needs " << preset->sourceCount
                   << " source(s), got " << sourceSpecs.size() << "\n";
         for (int i = 0; i < preset->sourceCount; i++) {
@@ -844,12 +844,12 @@ int main(int argc, char** argv) {
                         std::lock_guard<std::mutex> lock(outputMutex);
                         std::cout << "✓ " << file << " → " << outFile
                                   << " (" << duration.count() << "ms)\n";
-                        successCount++;
+                        ++successCount;
                     }
                     catch (const std::exception& e) {
                         std::lock_guard<std::mutex> lock(outputMutex);
                         std::cerr << "✗ " << file << " - Error: " << e.what() << "\n";
-                        failCount++;
+                        ++failCount;
                     }
                 }
             };
