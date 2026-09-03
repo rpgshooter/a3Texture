@@ -1,34 +1,20 @@
 {
-  "name": "a3texture",
-  "version": "1.0.0",
-  "description": "Native C++ PAA converter for Arma 3 textures",
-  "dependencies": [
-    "libsquish",
-    "lzo",
-    "libpng",
-    "tiff",
-    "nlohmann-json",
-    "stb",
-    {
-      "name": "imgui",
-      "features": [
-        "opengl3-binding",
-        "glfw-binding"
-      ]
-    },
-    {
-      "name": "glfw3",
-      "features": [
-        "wayland"
-      ],
-      "platform": "linux"
-    },
-    {
-      "name": "glfw3",
-      "platform": "!linux"
-    },
-    "glad",
-    "portable-file-dialogs"
-  ],
-  "builtin-baseline": "271a5b8850aa50f9a40269cbf3cf414b36e333d6"
+  "name" : "a3texture",
+  "version" : "1.0.0",
+  "description" : "Arma 3 all in one texturing tool",
+  "dependencies" : [ "lzo", "libpng", "tiff", "nlohmann-json", "stb", {
+    "name" : "imgui",
+    "features" : [ "opengl3-binding", "glfw-binding" ]
+  }, {
+    "name" : "glfw3",
+    "features" : [ "wayland" ],
+    "platform" : "linux"
+  }, {
+    "name" : "glfw3",
+    "platform" : "!linux"
+  }, "glad", "portable-file-dialogs", {
+    "name" : "libsquish",
+    "version>=" : "1.15#15"
+  } ],
+  "builtin-baseline" : "271a5b8850aa50f9a40269cbf3cf414b36e333d6"
 }

@@ -1,4 +1,4 @@
-#include "../include/image_loader.h"
+#include "image_loader.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -51,7 +51,7 @@ ImageData ImageLoader::loadTGA(const std::string& filename) {
 namespace {
 
 ImageData loadTIFFViaRGBA(TIFF* tif, uint32_t width, uint32_t height) {
-    std::vector<uint32_t> raster(size_t(width) * height);
+    std::vector<uint32_t> raster(static_cast<size_t>(width) * height);
     if (!TIFFReadRGBAImageOriented(tif, width, height, raster.data(),
                                    ORIENTATION_TOPLEFT, 0)) {
         throw std::runtime_error("Failed to decode TIFF");

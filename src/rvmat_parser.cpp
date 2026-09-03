@@ -1,4 +1,4 @@
-#include "../include/rvmat_parser.h"
+#include "rvmat_parser.h"
 
 #include <algorithm>
 #include <cctype>
@@ -247,7 +247,7 @@ bool Parser::parseStage(Lexer& lexer, int stageNum, Material& material) {
 			continue;
 
 		std::string propName = t.value;
-		std::transform(propName.begin(), propName.end(), propName.begin(), ::tolower);
+		std::ranges::transform(propName, propName.begin(), ::tolower);
 
 		t = lexer.peekToken();
 		if (t.type == Token::LBracket) {
@@ -315,7 +315,7 @@ bool Parser::parseProperty(Lexer& lexer, Material& material) {
 
 	std::string propName = t.value;
 	std::string propNameLower = propName;
-	std::transform(propNameLower.begin(), propNameLower.end(), propNameLower.begin(), ::tolower);
+	std::ranges::transform(propNameLower, propNameLower.begin(), ::tolower);
 
 	if (propNameLower == "class") {
 		t = lexer.nextToken();
@@ -323,13 +323,13 @@ bool Parser::parseProperty(Lexer& lexer, Material& material) {
 			return true;
 
 		std::string className = t.value;
-		std::transform(className.begin(), className.end(), className.begin(), ::tolower);
+		std::ranges::transform(className, className.begin(), ::tolower);
 
 		if (className.rfind("stage", 0) == 0) {
 			int stageNum = 0;
 			if (className.size() > 5) {
 				std::string suffix = className.substr(5);
-				if (!suffix.empty() && std::all_of(suffix.begin(), suffix.end(), ::isdigit)) {
+				if (!suffix.empty() && std::ranges::all_of(suffix, ::isdigit)) {
 					stageNum = std::stoi(suffix);
 					return parseStage(lexer, stageNum, material);
 				}
@@ -416,7 +416,7 @@ bool Parser::parseProperty(Lexer& lexer, Material& material) {
 			material.renderFlags = RenderFlag::None;
 			for (const auto& flag : *flags) {
 				std::string f = flag;
-				std::transform(f.begin(), f.end(), f.begin(), ::tolower);
+				std::ranges::transform(f, f.begin(), ::tolower);
 				if (f == "nozwrite")
 					material.renderFlags = material.renderFlags | RenderFlag::NoZWrite;
 				else if (f == "nocolorwrite")
@@ -586,7 +586,7 @@ std::filesystem::path resolveTexturePath(const std::string& texturePath, const s
 	std::filesystem::path texPath = texturePath;
 
 	std::string normalized = texturePath;
-	std::replace(normalized.begin(), normalized.end(), '\\', '/');
+	std::ranges::replace(normalized, '\\', '/');
 	texPath = normalized;
 
 	if (texPath.is_absolute()) {

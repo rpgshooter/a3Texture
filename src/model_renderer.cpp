@@ -1,7 +1,7 @@
-#include "../include/model_renderer.h"
+#include "model_renderer.h"
 
-#include "../include/paa_texture.h"
-#include "../include/rvmat_parser.h"
+#include "paa_texture.h"
+#include "rvmat_parser.h"
 
 #include <algorithm>
 #include <cstring>

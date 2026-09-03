@@ -1,4 +1,4 @@
-#include "../include/paa_texture.h"
+#include "paa_texture.h"
 
 namespace a3tex {
 
@@ -14,7 +14,7 @@ PAATexture PAALoader::Load(const std::string& path) {
         }
 
         const MipMap& mip = paa.getMipMaps().front();
-        if (mip.data.size() < size_t(mip.width) * mip.height * 4) {
+        if (mip.data.size() < static_cast<size_t>(mip.width) * mip.height * 4) {
             return texture;
         }
 
@@ -43,7 +43,7 @@ bool PAALoader::Upload(PAATexture& texture) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                 GLsizei(texture.width), GLsizei(texture.height), 0,
+                 static_cast<GLsizei>(texture.width), static_cast<GLsizei>(texture.height), 0,
                  GL_RGBA, GL_UNSIGNED_BYTE, texture.pixels.data());
     glGenerateMipmap(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, 0);

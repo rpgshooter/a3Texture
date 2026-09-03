@@ -1,4 +1,4 @@
-#include "../include/p3d_reader.h"
+#include "p3d_reader.h"
 
 #include <cstring>
 #include <fstream>

@@ -1,4 +1,4 @@
-#include "../include/texture_role.h"
+#include "texture_role.h"
 
 #include <algorithm>
 #include <cstring>
@@ -20,19 +20,19 @@ struct Token {
 
 // Longest first, so metallic wins over metal and normalgl over normal.
 const Token kTokens[] = {
-    {"ambient_occlusion", TextureRole::AmbientOcclusion, SwizzleType::NONE, false},
+    {"ambient_occlusion",TextureRole::AmbientOcclusion, SwizzleType::NONE, false},
     {"ambientocclusion", TextureRole::AmbientOcclusion, SwizzleType::NONE, false},
     {"normaldirectx",    TextureRole::Normal,           SwizzleType::NONE, false},
     {"displacement",     TextureRole::Ignore,           SwizzleType::NONE, false},
     {"normalopengl",     TextureRole::Normal,           SwizzleType::NONE, false},
     {"base_color",       TextureRole::BaseColor,        SwizzleType::NONE, false},
     {"basecolour",       TextureRole::BaseColor,        SwizzleType::NONE, false},
-    {"glossiness",            TextureRole::Gloss,            SwizzleType::NONE, false},
+    {"glossiness",       TextureRole::Gloss,            SwizzleType::NONE, false},
     {"basecolor",        TextureRole::BaseColor,        SwizzleType::NONE, false},
     {"metalness",        TextureRole::Metallic,         SwizzleType::NONE, false},
     {"normalmap",        TextureRole::Normal,           SwizzleType::NONE, false},
     {"occlusion",        TextureRole::AmbientOcclusion, SwizzleType::NONE, false},
-    {"roughness",             TextureRole::Roughness,        SwizzleType::NONE, true},
+    {"roughness",        TextureRole::Roughness,        SwizzleType::NONE, true},
     {"emissive",         TextureRole::Ignore,           SwizzleType::NONE, false},
     {"metallic",         TextureRole::Metallic,         SwizzleType::NONE, false},
     {"normaldx",         TextureRole::Normal,           SwizzleType::NONE, false},
@@ -46,12 +46,12 @@ const Token kTokens[] = {
     {"height",           TextureRole::Ignore,           SwizzleType::NONE, false},
     {"normal",           TextureRole::Normal,           SwizzleType::NONE, false},
     {"color",            TextureRole::BaseColor,        SwizzleType::NONE, false},
-    {"gloss",                 TextureRole::Gloss,            SwizzleType::NONE, false},
+    {"gloss",            TextureRole::Gloss,            SwizzleType::NONE, false},
     {"metal",            TextureRole::Metallic,         SwizzleType::NONE, false},
-    {"rough",                 TextureRole::Roughness,        SwizzleType::NONE, true},
+    {"rough",            TextureRole::Roughness,        SwizzleType::NONE, true},
     {"diff",             TextureRole::BaseColor,        SwizzleType::NONE, false},
     {"disp",             TextureRole::Ignore,           SwizzleType::NONE, false},
-    {"glos",                  TextureRole::Gloss,            SwizzleType::NONE, false},
+    {"glos",             TextureRole::Gloss,            SwizzleType::NONE, false},
     {"norm",             TextureRole::Normal,           SwizzleType::NONE, false},
     {"spec",             TextureRole::Metallic,         SwizzleType::NONE, false},
     {"alb",              TextureRole::BaseColor,        SwizzleType::NONE, false},
@@ -59,7 +59,7 @@ const Token kTokens[] = {
     {"mtl",              TextureRole::Metallic,         SwizzleType::NONE, false},
     {"nrm",              TextureRole::Normal,           SwizzleType::NONE, false},
     {"occ",              TextureRole::AmbientOcclusion, SwizzleType::NONE, false},
-    {"rgh",                   TextureRole::Roughness,        SwizzleType::NONE, true},
+    {"rgh",              TextureRole::Roughness,        SwizzleType::NONE, true},
     {"ao",               TextureRole::AmbientOcclusion, SwizzleType::NONE, false},
 
     // Arma's own names convert straight through.
@@ -74,7 +74,7 @@ const Token kTokens[] = {
 };
 
 std::string lowered(std::string value) {
-    std::transform(value.begin(), value.end(), value.begin(), ::tolower);
+    std::ranges::transform(value, value.begin(), ::tolower);
     return value;
 }
 

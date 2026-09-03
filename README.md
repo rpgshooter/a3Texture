@@ -1,6 +1,7 @@
-# Arma 3 PAA Converter - Native C++ Edition
+# A3Texture
 
 High-performance native C++ texture converter for Arma 3's PAA format.
+And more
 
 ## Features
 

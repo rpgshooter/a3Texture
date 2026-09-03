@@ -1,7 +1,7 @@
-#include "../include/job_runner.h"
-#include "../include/channel_packer.h"
+#include "job_runner.h"
+#include "channel_packer.h"
 #include "../include/image_loader.h"
-#include "../include/paa.h"
+#include "paa.h"
 
 #include <atomic>
 #include <chrono>

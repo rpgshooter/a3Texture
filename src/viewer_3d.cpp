@@ -1,4 +1,4 @@
-#include "../include/viewer_3d.h"
+#include "viewer_3d.h"
 
 #include <algorithm>
 #include <cmath>
@@ -48,12 +48,12 @@ bool LoadOBJ(const char* path, Mesh& mesh) {
 				int vi = 0, ti = 0, ni = 0;
 				if (sscanf(s.c_str(), "%d/%d/%d", &vi, &ti, &ni) >= 1 || sscanf(s.c_str(), "%d//%d", &vi, &ni) >= 1 ||
 					sscanf(s.c_str(), "%d", &vi) >= 1) {
-					if (vi > 0 && (vi - 1) * 3 + 2 < (int)positions.size()) {
+					if (vi > 0 && (vi - 1) * 3 + 2 < static_cast<int>(positions.size())) {
 						v.x = positions[(vi - 1) * 3];
 						v.y = positions[(vi - 1) * 3 + 1];
 						v.z = positions[(vi - 1) * 3 + 2];
 					}
-					if (ni > 0 && (ni - 1) * 3 + 2 < (int)normals.size()) {
+					if (ni > 0 && (ni - 1) * 3 + 2 < static_cast<int>(normals.size())) {
 						v.nx = normals[(ni - 1) * 3];
 						v.ny = normals[(ni - 1) * 3 + 1];
 						v.nz = normals[(ni - 1) * 3 + 2];
@@ -145,9 +145,9 @@ bool LoadOBJ(const char* path, Mesh& mesh) {
 	glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
 	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
 
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), static_cast<void *>(nullptr));
 	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)(3 * sizeof(float)));
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void *>(3 * sizeof(float)));
 	glEnableVertexAttribArray(1);
 
 	glBindVertexArray(0);
@@ -285,7 +285,7 @@ bool ConvertP3DToMesh(const P3DLOD& lod, Mesh& mesh, const std::vector<std::stri
 	std::map<std::string, int> texMap;
 	int nextTexIndex = 0;
 	for (const auto& face : lod.faces) {
-		if (!face.texture.empty() && texMap.find(face.texture) == texMap.end()) {
+		if (!face.texture.empty() && !texMap.contains(face.texture)) {
 			if (nextTexIndex < 16) {
 				texMap[face.texture] = nextTexIndex++;
 			}
@@ -310,9 +310,8 @@ bool ConvertP3DToMesh(const P3DLOD& lod, Mesh& mesh, const std::vector<std::stri
 
 		float texIndex = 0.0f;
 		if (!face.texture.empty()) {
-			auto it = texMap.find(face.texture);
-			if (it != texMap.end()) {
-				texIndex = (float)it->second;
+			if (auto it = texMap.find(face.texture); it != texMap.end()) {
+				texIndex = static_cast<float>(it->second);
 			}
 		}
 
@@ -340,7 +339,7 @@ bool ConvertP3DToMesh(const P3DLOD& lod, Mesh& mesh, const std::vector<std::stri
 			if (fv.pointIndex >= lod.points.size())
 				continue;
 
-			Vertex v;
+			Vertex v{};
 			v.x = lod.points[fv.pointIndex].x;
 			v.y = lod.points[fv.pointIndex].y;
 			v.z = lod.points[fv.pointIndex].z;
@@ -398,9 +397,9 @@ bool ConvertP3DToMesh(const P3DLOD& lod, Mesh& mesh, const std::vector<std::stri
 	glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
 	glBufferData(GL_ARRAY_BUFFER, mesh.vertices.size() * sizeof(Vertex), mesh.vertices.data(), GL_STATIC_DRAW);
 
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), static_cast<void *>(nullptr));
 	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)(3 * sizeof(float)));
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void *>(3 * sizeof(float)));
 	glEnableVertexAttribArray(1);
 
 	glBindVertexArray(0);
@@ -422,7 +421,7 @@ bool ConvertP3DToMeshAnimated(const P3DLOD& lod, Mesh& mesh, const std::vector<s
 	std::map<std::string, int> texMap;
 	int nextTexIndex = 0;
 	for (const auto& face : lod.faces) {
-		if (!face.texture.empty() && texMap.find(face.texture) == texMap.end()) {
+		if (!face.texture.empty() && !texMap.contains(face.texture)) {
 			if (nextTexIndex < 16) {
 				texMap[face.texture] = nextTexIndex++;
 			}
@@ -440,9 +439,8 @@ bool ConvertP3DToMeshAnimated(const P3DLOD& lod, Mesh& mesh, const std::vector<s
 			if (t.type == 2)
 				continue;
 
-			uint8_t weight = GetPointWeight(lod, pi, t.selection);
-			if (weight > 0) {
-				pointTransforms[pi].push_back({&t, weight / 255.0f});
+			if (uint8_t weight = GetPointWeight(lod, pi, t.selection); weight > 0) {
+				pointTransforms[pi].emplace_back(&t, weight / 255.0f);
 			}
 		}
 	}
@@ -468,7 +466,7 @@ bool ConvertP3DToMeshAnimated(const P3DLOD& lod, Mesh& mesh, const std::vector<s
 		if (!face.texture.empty()) {
 			auto it = texMap.find(face.texture);
 			if (it != texMap.end()) {
-				texIndex = (float)it->second;
+				texIndex = static_cast<float>(it->second);
 			}
 		}
 
@@ -566,9 +564,9 @@ bool ConvertP3DToMeshAnimated(const P3DLOD& lod, Mesh& mesh, const std::vector<s
 	glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
 	glBufferData(GL_ARRAY_BUFFER, mesh.vertices.size() * sizeof(Vertex), mesh.vertices.data(), GL_STATIC_DRAW);
 
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), static_cast<void *>(nullptr));
 	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)(3 * sizeof(float)));
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void *>(3 * sizeof(float)));
 	glEnableVertexAttribArray(1);
 
 	glBindVertexArray(0);

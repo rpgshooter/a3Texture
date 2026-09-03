@@ -82,20 +82,20 @@ public:
     void writePAA(const std::string& filename, PAAFormat format = PAAFormat::UNKNOWN);
 
     void setQuality(Quality level) { quality = level; }
-    Quality getQuality() const { return quality; }
+    [[nodiscard]] Quality getQuality() const { return quality; }
 
     // 0 uses all cores. Set to 1 when converting several files concurrently.
     void setThreadCount(unsigned count) { threadCount = count; }
 
     // Channel swizzle, written as the SWIZ tagg. Arma infers texture type from it.
     void setSwizzle(SwizzleType type) { swizzle = type; }
-    SwizzleType getSwizzle() const { return swizzle; }
+    [[nodiscard]] SwizzleType getSwizzle() const { return swizzle; }
     static SwizzleType swizzleFromFilename(const std::string& filename);
     static const char* swizzleName(SwizzleType type);
     static PAAFormat swizzleFormat(SwizzleType type);   // UNKNOWN means auto
 
     void setSwizzleMode(SwizzleMode mode) { swizzleMode = mode; }
-    SwizzleMode getSwizzleMode() const { return swizzleMode; }
+    [[nodiscard]] SwizzleMode getSwizzleMode() const { return swizzleMode; }
 
     // Write image file (PNG)
     void writeImage(const std::string& filename, int mipLevel = 0);
@@ -104,20 +104,20 @@ public:
     std::vector<uint8_t> getRawPixelData(uint8_t level = 0);
 
     // Pixels as they will be stored, with the swizzle applied
-    std::vector<uint8_t> getPackedPixelData(uint8_t level = 0) const;
+    [[nodiscard]] std::vector<uint8_t> getPackedPixelData(uint8_t level = 0) const;
 
     // Set pixel data
     void setRawPixelData(const std::vector<uint8_t>& data, uint8_t level = 0);
 
     // Getters
-    PAAFormat getFormat() const { return format; }
-    const std::vector<MipMap>& getMipMaps() const { return mipMaps; }
-    const std::vector<Tagg>& getTaggs() const { return taggs; }
-    bool hasAlpha() const { return hasTransparency; }
+    [[nodiscard]] PAAFormat getFormat() const { return format; }
+    [[nodiscard]] const std::vector<MipMap>& getMipMaps() const { return mipMaps; }
+    [[nodiscard]] const std::vector<Tagg>& getTaggs() const { return taggs; }
+    [[nodiscard]] bool hasAlpha() const { return hasTransparency; }
 
 private:
     void calculateMipmapsAndTaggs();
-    std::vector<uint8_t> swizzleTransformBytes() const;
+    [[nodiscard]] std::vector<uint8_t> swizzleTransformBytes() const;
     void compressDXT(MipMap& mipmap);
     void decompressDXT1(MipMap& mipmap);
     void decompressDXT5(MipMap& mipmap);

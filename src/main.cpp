@@ -1,10 +1,10 @@
 #include "../include/paa.h"
 #include "../include/image_loader.h"
-#include "../include/channel_packer.h"
+#include "channel_packer.h"
 #include "../include/texture_role.h"
 #include "../include/job_runner.h"
-#include "../include/p3d_reader.h"
-#include "../include/rvmat_writer.h"
+#include "p3d_reader.h"
+#include "rvmat_writer.h"
 
 #include <nlohmann/json.hpp>
 #include <fstream>

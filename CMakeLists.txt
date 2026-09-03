@@ -47,20 +47,20 @@ set(SOURCES
 )
 
 set(HEADERS
-    include/paa.h
-    include/image_loader.h
-    include/channel_packer.h
-    include/texture_role.h
-    include/job_runner.h
-    include/p3d_reader.h
-    include/rvmat_writer.h
-    include/rvmat_shaders.h
-    include/viewer_3d.h
-    include/model_renderer.h
-    include/paa_texture.h
-    include/rvmat_parser.h
-    include/binary_reader.h
-    include/utils.h
+        src/paa.h
+        src/image_loader.h
+        src/channel_packer.h
+        src/texture_role.h
+        src/job_runner.h
+        src/p3d_reader.h
+        src/rvmat_writer.h
+        src/rvmat_shaders.h
+        src/viewer_3d.h
+        src/model_renderer.h
+        src/paa_texture.h
+        src/rvmat_parser.h
+        src/binary_reader.h
+        src/utils.h
 )
 
 #=============================================================================

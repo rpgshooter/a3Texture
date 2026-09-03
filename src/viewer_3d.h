@@ -3,7 +3,6 @@
 #include "p3d_reader.h"
 
 #include <glad/glad.h>
-
 #include <cstdint>
 #include <map>
 #include <string>

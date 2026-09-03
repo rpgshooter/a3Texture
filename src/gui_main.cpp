@@ -1,13 +1,13 @@
-#include "../include/paa.h"
+#include "paa.h"
 #include "../include/image_loader.h"
-#include "../include/channel_packer.h"
-#include "../include/texture_role.h"
+#include "channel_packer.h"
+#include "texture_role.h"
 #include "../include/p3d_reader.h"
 #include "../include/viewer_3d.h"
-#include "../include/model_renderer.h"
+#include "model_renderer.h"
 #include "../include/rvmat_writer.h"
 #include "../include/rvmat_shaders.h"
-#include "../include/rvmat_parser.h"
+#include "rvmat_parser.h"
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -34,10 +34,10 @@ namespace fs = std::filesystem;
 namespace {
 
 const char* kImageFilter = "*.png *.tga *.jpg *.jpeg *.tif *.tiff";
-
+// will probably add additional formats
 bool isSupportedImage(const std::string& path) {
     std::string ext = fs::path(path).extension().string();
-    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    std::ranges::transform(ext, ext.begin(), ::tolower);
     return ext == ".png" || ext == ".tga" || ext == ".jpg" ||
            ext == ".jpeg" || ext == ".tif" || ext == ".tiff";
 }

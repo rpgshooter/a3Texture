@@ -1,4 +1,4 @@
-#include "../include/rvmat_writer.h"
+#include "rvmat_writer.h"
 #include "../include/texture_role.h"
 
 #include <algorithm>
@@ -13,7 +13,7 @@ namespace a3tex {
 
 namespace {
 
-// Retail files carry float32 artefacts like 0.30000001. Write the shortest
+// Retail files carry float32 artifacts like 0.30000001. Write the shortest
 // form that reads back the same, which is easier to edit by hand.
 std::string number(float value) {
     if (std::fabs(value - std::round(value)) < 1e-6f) {
@@ -74,7 +74,7 @@ std::string enginePath(const std::string& path, const std::string& driveRoot) {
     }
 
     std::string text = relative.generic_string();
-    std::replace(text.begin(), text.end(), '/', '\\');
+    std::ranges::replace(text, '/', '\\');
     return text;
 }
 

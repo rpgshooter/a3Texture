@@ -1,6 +1,6 @@
 #pragma once
 
-#include "image_loader.h"
+#include "../include/image_loader.h"
 #include "paa.h"
 
 #include <vector>

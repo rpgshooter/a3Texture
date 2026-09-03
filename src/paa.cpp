@@ -1,6 +1,6 @@
-#include "../include/paa.h"
-#include "../include/utils.h"
-#include "../include/image_loader.h"
+#include "paa.h"
+#include "utils.h"
+#include "image_loader.h"
 
 #include <squish.h>
 #include <lzo/lzo1x.h>

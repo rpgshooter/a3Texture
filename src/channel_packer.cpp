@@ -1,8 +1,9 @@
-#include "../include/channel_packer.h"
+#include "channel_packer.h"
 
 #include <stdexcept>
 #include <algorithm>
 #include <map>
+#include <ranges>
 
 namespace a3tex {
 
@@ -16,7 +17,7 @@ constexpr ChannelMapping kFrom(int source, PackChannel channel) {
     return ChannelMapping{source, channel, 0, false};
 }
 
-const PackPreset kPresets[] = {
+constexpr PackPreset kPresets[] = {
     {
         "smdi", SwizzleType::SMDI, 2,
         {"Metallic / specular", "Specular power (gloss)", nullptr, nullptr},
@@ -50,32 +51,32 @@ ImageData resize(const ImageData& src, uint32_t width, uint32_t height) {
     ImageData out;
     out.width = width;
     out.height = height;
-    out.data.resize(size_t(width) * height * 4);
+    out.data.resize(static_cast<size_t>(width) * height * 4);
 
-    const double sx = double(src.width) / width;
-    const double sy = double(src.height) / height;
+    const double sx = static_cast<double>(src.width) / width;
+    const double sy = static_cast<double>(src.height) / height;
 
     for (uint32_t y = 0; y < height; y++) {
         const double fy = (y + 0.5) * sy - 0.5;
-        const int y0 = std::max(0, int(fy));
+        const int y0 = std::max(0, static_cast<int>(fy));
         const int y1 = std::min<int>(src.height - 1, y0 + 1);
         const double wy = std::max(0.0, fy - y0);
 
         for (uint32_t x = 0; x < width; x++) {
             const double fx = (x + 0.5) * sx - 0.5;
-            const int x0 = std::max(0, int(fx));
+            const int x0 = std::max(0, static_cast<int>(fx));
             const int x1 = std::min<int>(src.width - 1, x0 + 1);
             const double wx = std::max(0.0, fx - x0);
 
             for (int c = 0; c < 4; c++) {
-                const double a = src.data[(size_t(y0) * src.width + x0) * 4 + c];
-                const double b = src.data[(size_t(y0) * src.width + x1) * 4 + c];
-                const double d = src.data[(size_t(y1) * src.width + x0) * 4 + c];
-                const double e = src.data[(size_t(y1) * src.width + x1) * 4 + c];
+                const double a = src.data[(static_cast<size_t>(y0) * src.width + x0) * 4 + c];
+                const double b = src.data[(static_cast<size_t>(y0) * src.width + x1) * 4 + c];
+                const double d = src.data[(static_cast<size_t>(y1) * src.width + x0) * 4 + c];
+                const double e = src.data[(static_cast<size_t>(y1) * src.width + x1) * 4 + c];
 
                 const double top = a + (b - a) * wx;
                 const double bottom = d + (e - d) * wx;
-                out.data[(size_t(y) * width + x) * 4 + c] =
+                out.data[(static_cast<size_t>(y) * width + x) * 4 + c] =
                     static_cast<uint8_t>(top + (bottom - top) * wy + 0.5);
             }
         }
@@ -105,7 +106,7 @@ void ChannelPacker::setSlot(PackChannel output, const ChannelMapping& mapping) {
 }
 
 void ChannelPacker::setSource(int index, const ImageData& image) {
-    if (index < 0 || index >= int(sources.size())) {
+    if (index < 0 || index >= static_cast<int>(sources.size())) {
         throw std::out_of_range("Source index out of range");
     }
     sources[index] = image;
@@ -162,8 +163,8 @@ void ChannelPacker::resolveSize(uint32_t& width, uint32_t& height) const {
     // different shapes is genuinely ambiguous.
     auto best = counts.begin();
     for (auto it = std::next(counts.begin()); it != counts.end(); ++it) {
-        const size_t area = size_t(it->first.first) * it->first.second;
-        const size_t bestArea = size_t(best->first.first) * best->first.second;
+        const size_t area = static_cast<size_t>(it->first.first) * it->first.second;
+        const size_t bestArea = static_cast<size_t>(best->first.first) * best->first.second;
 
         if (it->second > best->second ||
             (it->second == best->second && area > bestArea)) {
@@ -171,15 +172,15 @@ void ChannelPacker::resolveSize(uint32_t& width, uint32_t& height) const {
         }
     }
 
-    const size_t bestArea = size_t(best->first.first) * best->first.second;
+    const size_t bestArea = static_cast<size_t>(best->first.first) * best->first.second;
     for (const auto& entry : counts) {
-        const size_t area = size_t(entry.first.first) * entry.first.second;
+        const size_t area = static_cast<size_t>(entry.first.first) * entry.first.second;
         if (entry.first != best->first && entry.second == best->second && area == bestArea) {
             std::string sizes;
-            for (const auto& option : counts) {
+            for (const auto &[fst, snd]: counts | std::views::keys) {
                 if (!sizes.empty()) sizes += ", ";
-                sizes += std::to_string(option.first.first) + "x" +
-                         std::to_string(option.first.second);
+                sizes += std::to_string(fst) + "x" +
+                         std::to_string(snd);
             }
             throw std::runtime_error(
                 "Sources have equally sized but differently shaped resolutions (" +
@@ -195,7 +196,7 @@ ImageData ChannelPacker::pack() const {
     for (size_t i = 0; i < sources.size(); i++) {
         bool used = false;
         for (const auto& slot : preset.slots) {
-            if (slot.source == int(i)) used = true;
+            if (slot.source == static_cast<int>(i)) used = true;
         }
         if (used && sources[i].data.empty()) {
             const char* label = preset.sourceLabels[i];
@@ -217,14 +218,14 @@ ImageData ChannelPacker::pack() const {
     ImageData out;
     out.width = width;
     out.height = height;
-    out.data.resize(size_t(width) * height * 4);
+    out.data.resize(static_cast<size_t>(width) * height * 4);
 
-    const size_t pixels = size_t(width) * height;
+    const size_t pixels = static_cast<size_t>(width) * height;
     for (int c = 0; c < 4; c++) {
         const ChannelMapping& slot = preset.slots[c];
 
         if (slot.source < 0) {
-            const uint8_t value = slot.invert ? uint8_t(255 - slot.constant) : slot.constant;
+            const uint8_t value = slot.invert ? static_cast<uint8_t>(255 - slot.constant) : slot.constant;
             for (size_t i = 0; i < pixels; i++) {
                 out.data[i * 4 + c] = value;
             }
@@ -235,7 +236,7 @@ ImageData ChannelPacker::pack() const {
         const int channel = static_cast<int>(slot.channel);
         for (size_t i = 0; i < pixels; i++) {
             const uint8_t value = source.data[i * 4 + channel];
-            out.data[i * 4 + c] = slot.invert ? uint8_t(255 - value) : value;
+            out.data[i * 4 + c] = slot.invert ? static_cast<uint8_t>(255 - value) : value;
         }
     }
 
