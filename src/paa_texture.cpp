@@ -1,6 +1,6 @@
 #include "../include/paa_texture.h"
 
-namespace arma3 {
+namespace a3tex {
 
 PAATexture PAALoader::Load(const std::string& path) {
     PAATexture texture;
@@ -59,4 +59,4 @@ const char* PAALoader::GetTypeName(PAAFormat format) {
     }
 }
 
-} // namespace arma3
+} // namespace a3tex

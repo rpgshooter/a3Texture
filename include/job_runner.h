@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace arma3 {
+namespace a3tex {
 
 struct JobOptions {
     std::string outputDir;             // empty writes beside the first source
@@ -32,4 +32,4 @@ std::pair<int, int> runJobs(const std::vector<PlannedOutput>& jobs,
                             const JobOptions& options,
                             const std::function<void(const JobResult&)>& onResult);
 
-} // namespace arma3
+} // namespace a3tex

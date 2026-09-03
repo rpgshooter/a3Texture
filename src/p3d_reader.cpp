@@ -5,7 +5,7 @@
 #include <algorithm>
 
 
-namespace arma3 {
+namespace a3tex {
 //=============================================================================
 // ODOL LOD Geometry Parser
 //=============================================================================
@@ -618,4 +618,4 @@ P3DInfo ReadP3DInfo(const char* path) {
 	return info;
 }
 
-} // namespace arma3
+} // namespace a3tex

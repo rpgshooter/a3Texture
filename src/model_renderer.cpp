@@ -8,7 +8,7 @@
 #include <filesystem>
 
 
-namespace arma3 {
+namespace a3tex {
 
 static void CheckGLError(const char* context) {
 	GLenum err;
@@ -2463,4 +2463,4 @@ int ModelRenderer::AddTextureSlotWithMaterial(const std::string& path) {
 	return index;
 }
 
-} // namespace arma3
+} // namespace a3tex

@@ -14,7 +14,7 @@
 #include <thread>
 #include <atomic>
 
-namespace arma3 {
+namespace a3tex {
 
 using namespace utils;
 
@@ -698,4 +698,4 @@ void PAA::writeImage(const std::string& filename, int mipLevel) {
     ImageLoader::savePNG(filename, img);
 }
 
-} // namespace arma3
+} // namespace a3tex

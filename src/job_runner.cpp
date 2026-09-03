@@ -11,7 +11,7 @@
 
 namespace fs = std::filesystem;
 
-namespace arma3 {
+namespace a3tex {
 
 JobResult runJob(const PlannedOutput& job, const JobOptions& options) {
     JobResult result;
@@ -108,4 +108,4 @@ std::pair<int, int> runJobs(const std::vector<PlannedOutput>& jobs,
     return {okCount.load(), failCount.load()};
 }
 
-} // namespace arma3
+} // namespace a3tex

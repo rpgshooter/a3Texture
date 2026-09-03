@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace arma3 {
+namespace a3tex {
 
 // What a source file holds. Exporters either write Arma's own names, in which
 // case the file converts as-is, or PBR names that have to be assembled first.
@@ -60,4 +60,4 @@ std::vector<RoleOption> roleOptions();
 const char* roleLabel(TextureRole role);
 TextureRole roleFromName(const std::string& name);
 
-} // namespace arma3
+} // namespace a3tex

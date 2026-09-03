@@ -35,7 +35,7 @@ void printUsage(const char* programName) {
     std::cout << "  " << programName << " pack --preset <name> --source <spec> ... <output.paa>\n";
     std::cout << "  --preset <name>         One of: ";
     {
-        auto names = arma3::ChannelPacker::presetNames();
+        auto names = a3tex::ChannelPacker::presetNames();
         for (size_t i = 0; i < names.size(); i++) {
             std::cout << (i ? ", " : "") << names[i];
         }
@@ -67,10 +67,10 @@ void printUsage(const char* programName) {
     std::cout << "  --role <name>           Force the role of following files\n";
 }
 
-arma3::Quality parseQuality(const std::string& value) {
-    if (value == "fast") return arma3::Quality::Fast;
-    if (value == "high") return arma3::Quality::High;
-    return arma3::Quality::Normal;
+a3tex::Quality parseQuality(const std::string& value) {
+    if (value == "fast") return a3tex::Quality::Fast;
+    if (value == "high") return a3tex::Quality::High;
+    return a3tex::Quality::Normal;
 }
 
 int runRvmat(int argc, char** argv) {
@@ -100,12 +100,12 @@ int runRvmat(int argc, char** argv) {
         return 1;
     }
 
-    arma3::RvmatMaterial material = blank
-        ? arma3::blankMaterial()
-        : arma3::materialForTextureSet(source, driveRoot);
+    a3tex::RvmatMaterial material = blank
+        ? a3tex::blankMaterial()
+        : a3tex::materialForTextureSet(source, driveRoot);
 
     if (!templateName.empty()) {
-        const arma3::RvmatMaterial preset = arma3::rvmatTemplate(templateName);
+        const a3tex::RvmatMaterial preset = a3tex::rvmatTemplate(templateName);
         material.ambient = preset.ambient;
         material.diffuse = preset.diffuse;
         material.forcedDiffuse = preset.forcedDiffuse;
@@ -116,7 +116,7 @@ int runRvmat(int argc, char** argv) {
         material.vertexShaderID = preset.vertexShaderID;
     }
 
-    const std::string text = arma3::writeRvmat(material);
+    const std::string text = a3tex::writeRvmat(material);
 
     if (output.empty()) {
         std::cout << text;
@@ -140,7 +140,7 @@ int runModel(int argc, char** argv) {
     }
 
     const std::string path = argv[2];
-    const arma3::P3DInfo info = arma3::ReadP3DInfo(path.c_str());
+    const a3tex::P3DInfo info = a3tex::ReadP3DInfo(path.c_str());
 
     if (!info.valid) {
         std::cerr << "Could not read " << path << "\n";
@@ -159,7 +159,7 @@ int runModel(int argc, char** argv) {
     if (!info.lods.empty()) {
         std::cout << "\nLODs:\n";
         for (const auto& lod : info.lods) {
-            std::cout << "  " << arma3::GetLODTypeName(lod.resolution)
+            std::cout << "  " << a3tex::GetLODTypeName(lod.resolution)
                       << "  (" << lod.points.size() << " points, "
                       << lod.faces.size() << " faces)\n";
         }
@@ -202,12 +202,12 @@ int runModel(int argc, char** argv) {
 }
 
 int runPlan(int argc, char** argv, bool execute) {
-    std::vector<arma3::SourceFile> sources;
+    std::vector<a3tex::SourceFile> sources;
     std::string outputDir;
     int currentGroup = 0;
-    arma3::TextureRole currentRole = arma3::TextureRole::Ignore;
+    a3tex::TextureRole currentRole = a3tex::TextureRole::Ignore;
     bool roleSet = false;
-    arma3::Quality quality = arma3::Quality::Normal;
+    a3tex::Quality quality = a3tex::Quality::Normal;
 
     for (int i = 2; i < argc; i++) {
         const std::string arg = argv[i];
@@ -218,10 +218,10 @@ int runPlan(int argc, char** argv, bool execute) {
         } else if (arg == "--group" && i + 1 < argc) {
             currentGroup = std::stoi(argv[++i]);
         } else if (arg == "--role" && i + 1 < argc) {
-            currentRole = arma3::roleFromName(argv[++i]);
+            currentRole = a3tex::roleFromName(argv[++i]);
             roleSet = true;
         } else {
-            arma3::SourceFile source = arma3::describeSource(arg);
+            a3tex::SourceFile source = a3tex::describeSource(arg);
             source.group = currentGroup;
             if (roleSet) source.role = currentRole;
             sources.push_back(source);
@@ -236,12 +236,12 @@ int runPlan(int argc, char** argv, bool execute) {
     std::cout << "Inputs:\n";
     for (const auto& source : sources) {
         std::cout << "  " << fs::path(source.path).filename().string()
-                  << "  ->  " << arma3::roleLabel(source.role);
+                  << "  ->  " << a3tex::roleLabel(source.role);
         if (source.invert) std::cout << " (inverted)";
         std::cout << "\n";
     }
 
-    const auto outputs = arma3::planOutputs(sources);
+    const auto outputs = a3tex::planOutputs(sources);
     if (outputs.empty()) {
         std::cout << "\nNothing to write.\n";
         return 0;
@@ -264,11 +264,11 @@ int runPlan(int argc, char** argv, bool execute) {
 
     std::cout << "\n";
 
-    arma3::JobOptions options;
+    a3tex::JobOptions options;
     options.outputDir = outputDir;
     options.quality = quality;
 
-    const auto counts = arma3::runJobs(outputs, options, [](const arma3::JobResult& r) {
+    const auto counts = a3tex::runJobs(outputs, options, [](const a3tex::JobResult& r) {
         if (r.success) std::cout << "\u2713 " << r.name << "\n";
         else std::cerr << "\u2717 " << r.name << " - " << r.error << "\n";
     });
@@ -278,11 +278,11 @@ int runPlan(int argc, char** argv, bool execute) {
     return counts.second ? 1 : 0;
 }
 
-arma3::PackChannel channelFromName(const std::string& name) {
-    if (name == "g") return arma3::PackChannel::G;
-    if (name == "b") return arma3::PackChannel::B;
-    if (name == "a") return arma3::PackChannel::A;
-    return arma3::PackChannel::R;
+a3tex::PackChannel channelFromName(const std::string& name) {
+    if (name == "g") return a3tex::PackChannel::G;
+    if (name == "b") return a3tex::PackChannel::B;
+    if (name == "a") return a3tex::PackChannel::A;
+    return a3tex::PackChannel::R;
 }
 
 struct SlotSpec {
@@ -290,7 +290,7 @@ struct SlotSpec {
     bool constant = false;
     uint8_t value = 0;
     std::string file;
-    arma3::PackChannel channel = arma3::PackChannel::R;
+    a3tex::PackChannel channel = a3tex::PackChannel::R;
     bool invert = false;
 };
 
@@ -313,10 +313,10 @@ bool parseSlotSpec(const std::string& text, SlotSpec& out) {
     const size_t colon = spec.find_last_of(':');
     if (colon != std::string::npos && colon + 2 == spec.size()) {
         switch (spec[colon + 1]) {
-            case 'r': out.channel = arma3::PackChannel::R; break;
-            case 'g': out.channel = arma3::PackChannel::G; break;
-            case 'b': out.channel = arma3::PackChannel::B; break;
-            case 'a': out.channel = arma3::PackChannel::A; break;
+            case 'r': out.channel = a3tex::PackChannel::R; break;
+            case 'g': out.channel = a3tex::PackChannel::G; break;
+            case 'b': out.channel = a3tex::PackChannel::B; break;
+            case 'a': out.channel = a3tex::PackChannel::A; break;
             default: return false;
         }
         spec = spec.substr(0, colon);
@@ -327,11 +327,11 @@ bool parseSlotSpec(const std::string& text, SlotSpec& out) {
 }
 
 
-arma3::PAAFormat parseFormat(std::string value) {
+a3tex::PAAFormat parseFormat(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), ::toupper);
-    if (value == "DXT1") return arma3::PAAFormat::DXT1;
-    if (value == "DXT5") return arma3::PAAFormat::DXT5;
-    return arma3::PAAFormat::UNKNOWN;
+    if (value == "DXT1") return a3tex::PAAFormat::DXT1;
+    if (value == "DXT5") return a3tex::PAAFormat::DXT5;
+    return a3tex::PAAFormat::UNKNOWN;
 }
 
 struct SpecEntry {
@@ -339,12 +339,12 @@ struct SpecEntry {
     std::string input;
     std::string presetName;
     std::vector<std::string> files;
-    std::vector<arma3::PackChannel> channels;
+    std::vector<a3tex::PackChannel> channels;
     std::vector<bool> hasChannel;
     std::vector<bool> inverts;
     uint32_t width = 0;
     uint32_t height = 0;
-    arma3::PAAFormat format = arma3::PAAFormat::UNKNOWN;
+    a3tex::PAAFormat format = a3tex::PAAFormat::UNKNOWN;
 };
 
 int runSpec(int argc, char** argv) {
@@ -376,7 +376,7 @@ int runSpec(int argc, char** argv) {
         return path.is_absolute() ? path : base / path;
     };
 
-    const arma3::Quality quality =
+    const a3tex::Quality quality =
         parseQuality(doc.value("quality", std::string("normal")));
     const fs::path outputDir = resolve(doc.value("outputDir", std::string(".")));
 
@@ -418,7 +418,7 @@ int runSpec(int argc, char** argv) {
         for (const auto& source : item.value("sources", nlohmann::json::array())) {
             if (source.is_string()) {
                 entry.files.push_back(source.get<std::string>());
-                entry.channels.push_back(arma3::PackChannel::R);
+                entry.channels.push_back(a3tex::PackChannel::R);
                 entry.hasChannel.push_back(false);
                 entry.inverts.push_back(false);
             } else {
@@ -433,17 +433,17 @@ int runSpec(int argc, char** argv) {
         entries.push_back(std::move(entry));
     }
 
-    std::vector<arma3::PlannedOutput> jobs;
+    std::vector<a3tex::PlannedOutput> jobs;
     for (const auto& entry : entries) {
-        arma3::PlannedOutput job;
+        a3tex::PlannedOutput job;
         job.name = entry.output;
         job.format = entry.format;
         job.width = entry.width;
         job.height = entry.height;
 
         if (!entry.presetName.empty()) {
-            const arma3::PackPreset* preset =
-                arma3::ChannelPacker::findPreset(entry.presetName);
+            const a3tex::PackPreset* preset =
+                a3tex::ChannelPacker::findPreset(entry.presetName);
             if (!preset) {
                 std::cerr << entry.output << ": unknown preset " << entry.presetName << "\n";
                 return 1;
@@ -466,12 +466,12 @@ int runSpec(int argc, char** argv) {
                 }
             }
         } else {
-            job.swizzle = arma3::PAA::swizzleFromFilename(entry.output);
+            job.swizzle = a3tex::PAA::swizzleFromFilename(entry.output);
             job.sources.push_back(resolve(entry.input).string());
-            job.slots[0] = {0, arma3::PackChannel::R, 0, false};
-            job.slots[1] = {0, arma3::PackChannel::G, 0, false};
-            job.slots[2] = {0, arma3::PackChannel::B, 0, false};
-            job.slots[3] = {0, arma3::PackChannel::A, 0, false};
+            job.slots[0] = {0, a3tex::PackChannel::R, 0, false};
+            job.slots[1] = {0, a3tex::PackChannel::G, 0, false};
+            job.slots[2] = {0, a3tex::PackChannel::B, 0, false};
+            job.slots[3] = {0, a3tex::PackChannel::A, 0, false};
         }
 
         jobs.push_back(std::move(job));
@@ -479,13 +479,13 @@ int runSpec(int argc, char** argv) {
 
     std::cout << "Spec: " << jobs.size() << " texture(s)\n";
 
-    arma3::JobOptions options;
+    a3tex::JobOptions options;
     options.outputDir = outputDir.string();
     options.quality = quality;
     options.jobs = doc.value("jobs", 0u);
 
     const auto start = std::chrono::high_resolution_clock::now();
-    const auto counts = arma3::runJobs(jobs, options, [](const arma3::JobResult& r) {
+    const auto counts = a3tex::runJobs(jobs, options, [](const a3tex::JobResult& r) {
         if (r.success) std::cout << "\u2713 " << r.name << "\n";
         else std::cerr << "\u2717 " << r.name << " - " << r.error << "\n";
     });
@@ -498,21 +498,21 @@ int runSpec(int argc, char** argv) {
 }
 
 int runPack(int argc, char** argv) {
-    const arma3::PackPreset* preset = nullptr;
+    const a3tex::PackPreset* preset = nullptr;
     std::vector<std::string> sourceSpecs;
     SlotSpec slots[4];
     std::string output;
     uint32_t width = 0;
     uint32_t height = 0;
     bool applySwizzle = true;
-    arma3::Quality quality = arma3::Quality::Normal;
+    a3tex::Quality quality = a3tex::Quality::Normal;
 
     for (int i = 2; i < argc; i++) {
         std::string arg = argv[i];
 
         if (arg == "--preset" && i + 1 < argc) {
             const std::string name = argv[++i];
-            preset = arma3::ChannelPacker::findPreset(name);
+            preset = a3tex::ChannelPacker::findPreset(name);
             if (!preset) {
                 std::cerr << "Unknown preset: " << name << "\n";
                 return 1;
@@ -564,23 +564,23 @@ int runPack(int argc, char** argv) {
         return 1;
     }
     if (freeForm) {
-        arma3::ChannelMapping freeSlots[4];
+        a3tex::ChannelMapping freeSlots[4];
         std::vector<std::string> ordered;
         std::map<std::string, int> loaded;
 
         for (int c = 0; c < 4; c++) {
             const SlotSpec& spec = slots[c];
-            const auto channel = static_cast<arma3::PackChannel>(c);
+            const auto channel = static_cast<a3tex::PackChannel>(c);
 
             (void)channel;
 
             if (!spec.set) {
-                freeSlots[c] = {-1, arma3::PackChannel::R, uint8_t(c == 3 ? 255 : 0), false};
+                freeSlots[c] = {-1, a3tex::PackChannel::R, uint8_t(c == 3 ? 255 : 0), false};
                 continue;
             }
 
             if (spec.constant) {
-                freeSlots[c] = {-1, arma3::PackChannel::R, spec.value, spec.invert};
+                freeSlots[c] = {-1, a3tex::PackChannel::R, spec.value, spec.invert};
                 continue;
             }
 
@@ -592,21 +592,21 @@ int runPack(int argc, char** argv) {
             freeSlots[c] = {it->second, spec.channel, 0, spec.invert};
         }
 
-        arma3::PlannedOutput job;
+        a3tex::PlannedOutput job;
         job.name = fs::path(output).filename().string();
-        job.swizzle = arma3::PAA::swizzleFromFilename(output);
+        job.swizzle = a3tex::PAA::swizzleFromFilename(output);
         job.width = width;
         job.height = height;
-        if (!applySwizzle) job.mode = arma3::SwizzleMode::TagOnly;
+        if (!applySwizzle) job.mode = a3tex::SwizzleMode::TagOnly;
 
         for (const auto& file : ordered) job.sources.push_back(file);
         for (int c = 0; c < 4; c++) job.slots[c] = freeSlots[c];
 
-        arma3::JobOptions options;
+        a3tex::JobOptions options;
         options.quality = quality;
         options.outputDir = fs::path(output).parent_path().string();
 
-        const arma3::JobResult result = arma3::runJob(job, options);
+        const a3tex::JobResult result = a3tex::runJob(job, options);
         if (!result.success) {
             std::cerr << "Error: " << result.error << "\n";
             return 1;
@@ -624,7 +624,7 @@ int runPack(int argc, char** argv) {
         return 1;
     }
 
-    arma3::ChannelPacker packer(*preset);
+    a3tex::ChannelPacker packer(*preset);
 
     for (size_t i = 0; i < sourceSpecs.size(); i++) {
         std::string spec = sourceSpecs[i];
@@ -635,16 +635,16 @@ int runPack(int argc, char** argv) {
             spec.pop_back();
         }
 
-        arma3::PackChannel channel = arma3::PackChannel::R;
+        a3tex::PackChannel channel = a3tex::PackChannel::R;
         bool hasChannel = false;
         const size_t colon = spec.find_last_of(':');
         if (colon != std::string::npos && colon + 2 == spec.size()) {
             hasChannel = true;
             switch (spec[colon + 1]) {
-                case 'r': channel = arma3::PackChannel::R; break;
-                case 'g': channel = arma3::PackChannel::G; break;
-                case 'b': channel = arma3::PackChannel::B; break;
-                case 'a': channel = arma3::PackChannel::A; break;
+                case 'r': channel = a3tex::PackChannel::R; break;
+                case 'g': channel = a3tex::PackChannel::G; break;
+                case 'b': channel = a3tex::PackChannel::B; break;
+                case 'a': channel = a3tex::PackChannel::A; break;
                 default:
                     std::cerr << "Unknown channel in: " << sourceSpecs[i] << "\n";
                     return 1;
@@ -652,7 +652,7 @@ int runPack(int argc, char** argv) {
             spec = spec.substr(0, colon);
         }
 
-        packer.setSource(static_cast<int>(i), arma3::ImageLoader::load(spec));
+        packer.setSource(static_cast<int>(i), a3tex::ImageLoader::load(spec));
         if (hasChannel) {
             packer.setSourceChannel(static_cast<int>(i), channel);
         }
@@ -668,12 +668,12 @@ int runPack(int argc, char** argv) {
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    arma3::PAA paa;
+    a3tex::PAA paa;
     paa.setQuality(quality);
     paa.setImage(packer.pack());
     paa.setSwizzle(packer.getSwizzle());
     if (!applySwizzle) {
-        paa.setSwizzleMode(arma3::SwizzleMode::TagOnly);
+        paa.setSwizzleMode(a3tex::SwizzleMode::TagOnly);
     }
     paa.writePAA(output);
 
@@ -755,8 +755,8 @@ int main(int argc, char** argv) {
         std::string output;
         std::string batchPattern;
         std::string outputDir;
-        arma3::PAAFormat format = arma3::PAAFormat::UNKNOWN;
-        arma3::Quality quality = arma3::Quality::Normal;
+        a3tex::PAAFormat format = a3tex::PAAFormat::UNKNOWN;
+        a3tex::Quality quality = a3tex::Quality::Normal;
         unsigned jobs = 0;
         bool batchMode = false;
 
@@ -828,14 +828,14 @@ int main(int argc, char** argv) {
                     try {
                         auto start = std::chrono::high_resolution_clock::now();
 
-                        arma3::PAA paa;
+                        a3tex::PAA paa;
                         paa.setQuality(quality);
                         // Files already run in parallel, so keep each one serial.
                         paa.setThreadCount(1);
                         paa.loadImage(file);
 
                         std::string outFile = getOutputFilename(file, outputDir);
-                        paa.setSwizzle(arma3::PAA::swizzleFromFilename(outFile));
+                        paa.setSwizzle(a3tex::PAA::swizzleFromFilename(outFile));
                         paa.writePAA(outFile, format);
 
                         auto end = std::chrono::high_resolution_clock::now();
@@ -884,10 +884,10 @@ int main(int argc, char** argv) {
 
             auto start = std::chrono::high_resolution_clock::now();
 
-            arma3::PAA paa;
+            a3tex::PAA paa;
             paa.setQuality(quality);
             paa.loadImage(input);
-            paa.setSwizzle(arma3::PAA::swizzleFromFilename(output));
+            paa.setSwizzle(a3tex::PAA::swizzleFromFilename(output));
             paa.writePAA(output, format);
 
             auto end = std::chrono::high_resolution_clock::now();

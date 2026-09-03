@@ -7,7 +7,7 @@
 
 namespace fs = std::filesystem;
 
-namespace arma3 {
+namespace a3tex {
 
 namespace {
 
@@ -312,4 +312,4 @@ TextureRole roleFromName(const std::string& name) {
     return TextureRole::Ignore;
 }
 
-} // namespace arma3
+} // namespace a3tex

@@ -12,7 +12,7 @@
 #include <algorithm>
 #include <fstream>
 
-namespace arma3 {
+namespace a3tex {
 
 ImageData ImageLoader::loadPNG(const std::string& filename) {
     int width, height, channels;
@@ -256,4 +256,4 @@ bool ImageLoader::isTIFF(const std::string& filename) {
     return littleEndian || bigEndian;
 }
 
-} // namespace arma3
+} // namespace a3tex

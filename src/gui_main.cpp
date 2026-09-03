@@ -42,10 +42,10 @@ bool isSupportedImage(const std::string& path) {
            ext == ".jpeg" || ext == ".tif" || ext == ".tiff";
 }
 
-const char* formatLabel(arma3::PAAFormat format) {
+const char* formatLabel(a3tex::PAAFormat format) {
     switch (format) {
-        case arma3::PAAFormat::DXT1: return "DXT1";
-        case arma3::PAAFormat::DXT5: return "DXT5";
+        case a3tex::PAAFormat::DXT1: return "DXT1";
+        case a3tex::PAAFormat::DXT5: return "DXT5";
         default: return "auto";
     }
 }
@@ -63,13 +63,13 @@ GLuint uploadTexture(const uint8_t* rgba, int width, int height) {
     return id;
 }
 
-arma3::ImageData downscaleTo(const arma3::ImageData& src, uint32_t maxSide) {
+a3tex::ImageData downscaleTo(const a3tex::ImageData& src, uint32_t maxSide) {
     if (src.width <= maxSide && src.height <= maxSide) {
         return src;
     }
 
     const double scale = double(maxSide) / std::max(src.width, src.height);
-    arma3::ImageData out;
+    a3tex::ImageData out;
     out.width = std::max(1u, uint32_t(src.width * scale));
     out.height = std::max(1u, uint32_t(src.height * scale));
     out.data.resize(size_t(out.width) * out.height * 4);
@@ -241,12 +241,12 @@ struct TexturePreview {
         release();
         if (rgba.size() < size_t(w) * h * 4) return;
 
-        arma3::ImageData full;
+        a3tex::ImageData full;
         full.width = w;
         full.height = h;
         full.data = rgba;
 
-        const arma3::ImageData scaled = downscaleTo(full, 1024);
+        const a3tex::ImageData scaled = downscaleTo(full, 1024);
         width = scaled.width;
         height = scaled.height;
 
@@ -270,7 +270,7 @@ struct TexturePreview {
 
 // The shader lists run to 150 entries, so the combo is filtered by typing.
 inline bool shaderCombo(const char* label, std::string& value,
-                        const std::vector<arma3::ShaderInfo>& options, char* filter,
+                        const std::vector<a3tex::ShaderInfo>& options, char* filter,
                         size_t filterSize) {
     bool changed = false;
     if (ImGui::BeginCombo(label, value.c_str())) {
@@ -315,7 +315,7 @@ inline void drawChannelSwitcher(int& mode) {
 
 struct ConversionJob {
     std::string name;
-    arma3::SwizzleType swizzle = arma3::SwizzleType::NONE;
+    a3tex::SwizzleType swizzle = a3tex::SwizzleType::NONE;
     bool completed = false;
     bool success = false;
     std::string errorMessage;
@@ -455,7 +455,7 @@ public:
             accepted++;
 
             if (activeTab == 1) {
-                const arma3::PackPreset* preset = currentPreset();
+                const a3tex::PackPreset* preset = currentPreset();
                 for (int i = 0; preset && i < preset->sourceCount; i++) {
                     if (packSlots[i].path.empty()) {
                         packSlots[i].path = file;
@@ -463,7 +463,7 @@ public:
                     }
                 }
             } else {
-                inputFiles.push_back(arma3::describeSource(file));
+                inputFiles.push_back(a3tex::describeSource(file));
             }
         }
 
@@ -535,7 +535,7 @@ private:
         ImGui::Spacing();
 
         const bool busy = converting.load();
-        const bool canConvert = !busy && !arma3::planOutputs(inputFiles).empty();
+        const bool canConvert = !busy && !a3tex::planOutputs(inputFiles).empty();
 
         if (!canConvert) ImGui::BeginDisabled();
         if (ImGui::Button(busy ? "Converting..." : "Convert", ImVec2(160, 38))) {
@@ -563,7 +563,7 @@ private:
             return;
         }
 
-        const auto options = arma3::roleOptions();
+        const auto options = a3tex::roleOptions();
 
         ImGui::BeginChild("queue", ImVec2(0, 190), true);
         if (ImGui::BeginTable("files", 5,
@@ -607,8 +607,8 @@ private:
                 }
 
                 ImGui::TableNextColumn();
-                const bool packed = inputFiles[i].role == arma3::TextureRole::ArmaMap ||
-                                    inputFiles[i].role == arma3::TextureRole::Ignore;
+                const bool packed = inputFiles[i].role == a3tex::TextureRole::ArmaMap ||
+                                    inputFiles[i].role == a3tex::TextureRole::Ignore;
                 if (packed) {
                     ImGui::TextColored(kDim, " -");
                 } else {
@@ -616,7 +616,7 @@ private:
                 }
 
                 ImGui::TableNextColumn();
-                if (inputFiles[i].role == arma3::TextureRole::Ignore) {
+                if (inputFiles[i].role == a3tex::TextureRole::Ignore) {
                     ImGui::TextColored(kDim, " -");
                 } else {
                     ImGui::SetNextItemWidth(-1);
@@ -645,7 +645,7 @@ private:
     }
 
     void renderPlan() {
-        const auto outputs = arma3::planOutputs(inputFiles);
+        const auto outputs = a3tex::planOutputs(inputFiles);
 
         ImGui::Spacing();
         if (outputs.empty()) {
@@ -661,7 +661,7 @@ private:
             ImGui::TextColored(kAccent, "%s", output.name.c_str());
             ImGui::SameLine();
             ImGui::TextColored(kDim, "  %s",
-                formatLabel(arma3::PAA::swizzleFormat(output.swizzle)));
+                formatLabel(a3tex::PAA::swizzleFormat(output.swizzle)));
             if (!output.note.empty()) {
                 ImGui::SameLine();
                 ImGui::TextColored(kBad, "  %s", output.note.c_str());
@@ -737,14 +737,14 @@ private:
 
     // ------------------------------------------------------------------- pack
 
-    const arma3::PackPreset* currentPreset() const {
-        const auto names = arma3::ChannelPacker::presetNames();
+    const a3tex::PackPreset* currentPreset() const {
+        const auto names = a3tex::ChannelPacker::presetNames();
         if (packPreset < 0 || packPreset >= int(names.size())) return nullptr;
-        return arma3::ChannelPacker::findPreset(names[packPreset]);
+        return a3tex::ChannelPacker::findPreset(names[packPreset]);
     }
 
     void renderPack() {
-        const auto names = arma3::ChannelPacker::presetNames();
+        const auto names = a3tex::ChannelPacker::presetNames();
 
         std::string items;
         for (const auto& name : names) {
@@ -760,12 +760,12 @@ private:
             packStatus.clear();
         }
 
-        const arma3::PackPreset* preset = currentPreset();
+        const a3tex::PackPreset* preset = currentPreset();
         if (!preset) return;
 
         ImGui::SameLine(0, 20);
         ImGui::TextColored(kDim, "writes %s, swizzle applied on save",
-            formatLabel(arma3::PAA::swizzleFormat(preset->swizzle)));
+            formatLabel(a3tex::PAA::swizzleFormat(preset->swizzle)));
 
         ImGui::Spacing();
         ImGui::Separator();
@@ -914,20 +914,20 @@ private:
     }
 
     void doPack(bool save) {
-        const arma3::PackPreset* preset = currentPreset();
+        const a3tex::PackPreset* preset = currentPreset();
         if (!preset) return;
 
         packStatus.clear();
         packFailed = false;
 
         try {
-            arma3::ChannelPacker packer(*preset);
+            a3tex::ChannelPacker packer(*preset);
 
             for (int i = 0; i < preset->sourceCount; i++) {
-                packer.setSource(i, arma3::ImageLoader::load(packSlots[i].path));
+                packer.setSource(i, a3tex::ImageLoader::load(packSlots[i].path));
                 if (packer.sourceSlotCount(i) == 1) {
                     packer.setSourceChannel(
-                        i, static_cast<arma3::PackChannel>(packSlots[i].channel));
+                        i, static_cast<a3tex::PackChannel>(packSlots[i].channel));
                 }
                 packer.setSourceInvert(i, packSlots[i].invert);
             }
@@ -936,12 +936,12 @@ private:
                 packer.setTargetSize(uint32_t(overrideWidth), uint32_t(overrideHeight));
             }
 
-            arma3::ImageData packed = packer.pack();
+            a3tex::ImageData packed = packer.pack();
             packedWidth = packed.width;
             packedHeight = packed.height;
 
-            arma3::PAA paa;
-            paa.setQuality(static_cast<arma3::Quality>(selectedQuality));
+            a3tex::PAA paa;
+            paa.setQuality(static_cast<a3tex::Quality>(selectedQuality));
             paa.setImage(packed);
             paa.setSwizzle(preset->swizzle);
 
@@ -963,24 +963,24 @@ private:
         }
     }
 
-    void describeStored(arma3::SwizzleType type) {
+    void describeStored(a3tex::SwizzleType type) {
         static const char* kNames[4] = {"R", "G", "B", "A"};
         const char* sources[4] = {"?", "?", "?", "?"};
 
         switch (type) {
-            case arma3::SwizzleType::NOHQ:
+            case a3tex::SwizzleType::NOHQ:
                 sources[0] = "0"; sources[1] = "normal Y";
                 sources[2] = "normal Z"; sources[3] = "normal X, inverted";
                 break;
-            case arma3::SwizzleType::SMDI:
+            case a3tex::SwizzleType::SMDI:
                 sources[0] = "255"; sources[1] = "metallic / specular";
                 sources[2] = "specular power (gloss)"; sources[3] = "255";
                 break;
-            case arma3::SwizzleType::AS:
+            case a3tex::SwizzleType::AS:
                 sources[0] = "255"; sources[1] = "ambient occlusion";
                 sources[2] = "255"; sources[3] = "255";
                 break;
-            case arma3::SwizzleType::DT:
+            case a3tex::SwizzleType::DT:
                 sources[0] = "detail"; sources[1] = "detail";
                 sources[2] = "detail"; sources[3] = "255";
                 break;
@@ -997,12 +997,12 @@ private:
         clearPreview();
         if (rgba.size() < size_t(width) * height * 4) return;
 
-        arma3::ImageData full;
+        a3tex::ImageData full;
         full.width = width;
         full.height = height;
         full.data = rgba;
 
-        const arma3::ImageData scaled = downscaleTo(full, 512);
+        const a3tex::ImageData scaled = downscaleTo(full, 512);
         previewWidth = scaled.width;
         previewHeight = scaled.height;
 
@@ -1037,7 +1037,7 @@ private:
         viewLevel = 0;
 
         try {
-            arma3::PAA paa(path);
+            a3tex::PAA paa(path);
             paa.readPAA();
 
             viewPath = path;
@@ -1127,10 +1127,10 @@ private:
         ImGui::BeginGroup();
         ImGui::TextColored(kAccent, "%s", formatLabel(viewFormat));
         ImGui::SameLine();
-        if (viewSwizzle == arma3::SwizzleType::NONE) {
+        if (viewSwizzle == a3tex::SwizzleType::NONE) {
             ImGui::TextColored(kDim, "  no swizzle tagg");
         } else {
-            ImGui::TextColored(kDim, "  _%s", arma3::PAA::swizzleName(viewSwizzle));
+            ImGui::TextColored(kDim, "  _%s", a3tex::PAA::swizzleName(viewSwizzle));
         }
 
         ImGui::Spacing();
@@ -1178,11 +1178,11 @@ private:
     void writeViewPng(const std::string& file) {
         try {
             const auto& mip = viewMips[viewLevel];
-            arma3::ImageData image;
+            a3tex::ImageData image;
             image.width = mip.width;
             image.height = mip.height;
             image.data = mip.data;
-            arma3::ImageLoader::savePNG(file, image);
+            a3tex::ImageLoader::savePNG(file, image);
             viewError.clear();
         }
         catch (const std::exception& e) {
@@ -1195,7 +1195,7 @@ private:
 
     void openModel(const std::string& path) {
         modelError.clear();
-        modelInfo = arma3::ReadP3DInfo(path.c_str());
+        modelInfo = a3tex::ReadP3DInfo(path.c_str());
         modelPath = path;
         modelLod = 0;
 
@@ -1225,7 +1225,7 @@ private:
 
         if (modelLod < 0 || modelLod >= int(modelInfo.lods.size())) return;
 
-        const arma3::P3DLOD& lod = modelInfo.lods[modelLod];
+        const a3tex::P3DLOD& lod = modelInfo.lods[modelLod];
         if (lod.faces.empty()) {
             renderer.ClearMesh();
             modelError = modelInfo.type == "ODOL"
@@ -1244,15 +1244,15 @@ private:
 
         std::map<std::string, int> textureMap;
 
-        arma3::Mesh mesh;
-        if (!arma3::ConvertP3DToMesh(lod, mesh, hidden, "", &textureMap)) {
+        a3tex::Mesh mesh;
+        if (!a3tex::ConvertP3DToMesh(lod, mesh, hidden, "", &textureMap)) {
             modelError = "Could not build a mesh from this LOD";
             return;
         }
 
         loadModelTextures(textureMap, mesh);
 
-        arma3::RendererMesh renderMesh;
+        a3tex::RendererMesh renderMesh;
         renderMesh.vertices.reserve(mesh.vertices.size());
         for (const auto& v : mesh.vertices) {
             renderMesh.vertices.push_back({v.x, v.y, v.z, v.nx, v.ny, v.nz,
@@ -1286,10 +1286,10 @@ private:
                 ("a3paa_preview_" + std::to_string(std::hash<std::string>{}(source)) +
                  "_" + stem + ".paa");
 
-            arma3::PAA paa;
-            paa.setQuality(arma3::Quality::Fast);
-            paa.setImage(arma3::ImageLoader::load(source));
-            paa.setSwizzle(arma3::PAA::swizzleFromFilename(source));
+            a3tex::PAA paa;
+            paa.setQuality(a3tex::Quality::Fast);
+            paa.setImage(a3tex::ImageLoader::load(source));
+            paa.setSwizzle(a3tex::PAA::swizzleFromFilename(source));
             paa.writePAA(temp.string());
             return temp.string();
         }
@@ -1300,7 +1300,7 @@ private:
 
     // Adds a slot per referenced texture and repoints the mesh at the slots
     // that actually loaded, since a failed one is not added at all.
-    void loadModelTextures(const std::map<std::string, int>& textureMap, arma3::Mesh& mesh) {
+    void loadModelTextures(const std::map<std::string, int>& textureMap, a3tex::Mesh& mesh) {
         renderer.ClearTextureSlots();
         missingTextures.clear();
         textureRefs.clear();
@@ -1371,7 +1371,7 @@ private:
             ImGui::Spacing();
             std::string items;
             for (const auto& lod : modelInfo.lods) {
-                items += arma3::GetLODTypeName(lod.resolution) +
+                items += a3tex::GetLODTypeName(lod.resolution) +
                          " (" + std::to_string(lod.faces.size()) + " faces)";
                 items.push_back('\0');
             }
@@ -1502,15 +1502,15 @@ private:
 
     void rebuildMaterial() {
         if (materialSource.empty()) return;
-        material = arma3::materialForTextureSet(materialSource, textureRoot);
+        material = a3tex::materialForTextureSet(materialSource, textureRoot);
         applyMaterialTemplate();
     }
 
     void applyMaterialTemplate() {
-        const auto names = arma3::rvmatTemplates();
+        const auto names = a3tex::rvmatTemplates();
         if (materialTemplate < 0 || materialTemplate >= int(names.size())) return;
 
-        const arma3::RvmatMaterial preset = arma3::rvmatTemplate(names[materialTemplate]);
+        const a3tex::RvmatMaterial preset = a3tex::rvmatTemplate(names[materialTemplate]);
         material.ambient = preset.ambient;
         material.diffuse = preset.diffuse;
         material.forcedDiffuse = preset.forcedDiffuse;
@@ -1529,7 +1529,7 @@ private:
         ImGui::Spacing();
 
         if (ImGui::Button("New material")) {
-            material = arma3::blankMaterial();
+            material = a3tex::blankMaterial();
             materialSource.clear();
             materialPath.clear();
             materialActive = true;
@@ -1582,7 +1582,7 @@ private:
         ImGui::BeginChild("materialEditor", ImVec2(editorWidth, 0), false);
 
         std::string items;
-        for (const auto& type : arma3::materialTypes()) {
+        for (const auto& type : a3tex::materialTypes()) {
             items += type.name;
             items.push_back('\0');
         }
@@ -1590,7 +1590,7 @@ private:
 
         ImGui::SetNextItemWidth(300);
         if (ImGui::Combo("Material type", &materialTemplate, items.c_str())) {
-            const auto& types = arma3::materialTypes();
+            const auto& types = a3tex::materialTypes();
             if (materialTemplate >= 0 && materialTemplate < int(types.size())) {
                 material.vertexShaderID = types[materialTemplate].vertexShader;
                 material.pixelShaderID = types[materialTemplate].pixelShader;
@@ -1622,10 +1622,10 @@ private:
         }
 
         ImGui::SetNextItemWidth(300);
-        shaderCombo("Pixel shader", material.pixelShaderID, arma3::pixelShaders(),
+        shaderCombo("Pixel shader", material.pixelShaderID, a3tex::pixelShaders(),
                     pixelFilter, sizeof(pixelFilter));
         ImGui::SetNextItemWidth(300);
-        shaderCombo("Vertex shader", material.vertexShaderID, arma3::vertexShaders(),
+        shaderCombo("Vertex shader", material.vertexShaderID, a3tex::vertexShaders(),
                     vertexFilter, sizeof(vertexFilter));
 
         ImGui::Spacing();
@@ -1653,7 +1653,7 @@ private:
                             [this, slot](std::vector<std::string> files) {
                     if (files.empty()) return;
                     material.stages[slot].texture =
-                        arma3::enginePath(files[0], textureRoot);
+                        a3tex::enginePath(files[0], textureRoot);
                 });
             }
             ImGui::PopID();
@@ -1666,7 +1666,7 @@ private:
                 if (fs::path(file).extension().empty()) file += ".rvmat";
                 std::ofstream out(file, std::ios::binary);
                 if (out) {
-                    out << arma3::writeRvmat(material);
+                    out << a3tex::writeRvmat(material);
                     materialStatus = "Saved " + fs::path(file).filename().string();
                 } else {
                     materialStatus = "Could not write " + file;
@@ -1758,7 +1758,7 @@ private:
         }
 
         ImGui::TextColored(kDim, "This is what gets written");
-        const std::string text = arma3::writeRvmat(material);
+        const std::string text = a3tex::writeRvmat(material);
         ImGui::InputTextMultiline("##preview", const_cast<char*>(text.c_str()), text.size() + 1,
                                   ImVec2(-1, ImGui::GetContentRegionAvail().y - 4),
                                   ImGuiInputTextFlags_ReadOnly);
@@ -1786,7 +1786,7 @@ private:
             return;
         }
 
-        material = arma3::RvmatMaterial{};
+        material = a3tex::RvmatMaterial{};
         material.ambient = parsed->ambient.toArray();
         material.diffuse = parsed->diffuse.toArray();
         material.forcedDiffuse = parsed->forcedDiffuse.toArray();
@@ -1797,7 +1797,7 @@ private:
         if (!parsed->vertexShaderID.empty()) material.vertexShaderID = parsed->vertexShaderID;
 
         for (const auto& [index, stage] : parsed->stages) {
-            arma3::RvmatStage copy;
+            a3tex::RvmatStage copy;
             copy.texture = stage.texture;
             copy.uvSource = stage.uvSource;
             material.stages[index] = copy;
@@ -1811,8 +1811,8 @@ private:
 
     // Colours are cheap enough to push every frame; textures are only touched
     // when the stage actually points somewhere new.
-    arma3::MaterialProperties asRendererMaterial() const {
-        arma3::MaterialProperties properties;
+    a3tex::MaterialProperties asRendererMaterial() const {
+        a3tex::MaterialProperties properties;
         for (int c = 0; c < 4; c++) {
             properties.ambient[c] = material.ambient[c];
             properties.diffuse[c] = material.diffuse[c];
@@ -1825,7 +1825,7 @@ private:
     }
 
     void applyMaterialToModel(bool quiet) {
-        const arma3::MaterialProperties properties = asRendererMaterial();
+        const a3tex::MaterialProperties properties = asRendererMaterial();
         auto& slots = renderer.GetTextureSlotsMutable();
 
         appliedSections = 0;
@@ -1843,7 +1843,7 @@ private:
         }
 
         renderer.SetShaderStyle(
-            arma3::ModelRenderer::StyleForPixelShader(material.pixelShaderID));
+            a3tex::ModelRenderer::StyleForPixelShader(material.pixelShaderID));
 
         applyStageTexture(1, appliedNormal, Stage::Normal);
         applyStageTexture(2, appliedDetail, Stage::Detail);
@@ -1884,13 +1884,13 @@ private:
         askForFiles("Select images", {"Images", kImageFilter, "All files", "*"},
                     true, [this](std::vector<std::string> files) {
             for (const auto& file : files) {
-                inputFiles.push_back(arma3::describeSource(file));
+                inputFiles.push_back(a3tex::describeSource(file));
             }
         });
     }
 
     void startConversion() {
-        const auto outputs = arma3::planOutputs(inputFiles);
+        const auto outputs = a3tex::planOutputs(inputFiles);
         if (outputs.empty()) return;
 
         {
@@ -1921,7 +1921,7 @@ private:
 
             auto worker = [&] {
                 for (size_t index = next++; index < outputs.size(); index = next++) {
-                    const arma3::PlannedOutput& plan = outputs[index];
+                    const a3tex::PlannedOutput& plan = outputs[index];
 
                     bool ok = true;
                     std::string error;
@@ -1932,27 +1932,27 @@ private:
                     try {
                         const auto start = std::chrono::high_resolution_clock::now();
 
-                        arma3::ChannelPacker packer;
+                        a3tex::ChannelPacker packer;
                         for (const auto& file : plan.sources) {
-                            packer.addSource(arma3::ImageLoader::load(file));
+                            packer.addSource(a3tex::ImageLoader::load(file));
                         }
                         for (int c = 0; c < 4; c++) {
-                            packer.setSlot(static_cast<arma3::PackChannel>(c), plan.slots[c]);
+                            packer.setSlot(static_cast<a3tex::PackChannel>(c), plan.slots[c]);
                         }
 
-                        arma3::ImageData packed = packer.pack();
+                        a3tex::ImageData packed = packer.pack();
                         width = packed.width;
                         height = packed.height;
 
-                        arma3::PAA paa;
-                        paa.setQuality(static_cast<arma3::Quality>(qualityChoice));
+                        a3tex::PAA paa;
+                        paa.setQuality(static_cast<a3tex::Quality>(qualityChoice));
                         paa.setThreadCount(1);
                         paa.setImage(packed);
                         paa.setSwizzle(plan.swizzle);
 
-                        arma3::PAAFormat format = arma3::PAAFormat::UNKNOWN;
-                        if (formatChoice == 1) format = arma3::PAAFormat::DXT1;
-                        else if (formatChoice == 2) format = arma3::PAAFormat::DXT5;
+                        a3tex::PAAFormat format = a3tex::PAAFormat::UNKNOWN;
+                        if (formatChoice == 1) format = a3tex::PAAFormat::DXT1;
+                        else if (formatChoice == 2) format = a3tex::PAAFormat::DXT5;
 
                         const std::string base = dir.empty()
                             ? fs::path(plan.sources.front()).parent_path().string()
@@ -2005,7 +2005,7 @@ private:
     int activeTab = 0;
     std::string dropMessage;
     bool dropRejected = false;
-    std::vector<arma3::SourceFile> inputFiles;
+    std::vector<a3tex::SourceFile> inputFiles;
     char outputDir[512] = {0};
     int selectedFormat = 0;
     int selectedQuality = 1;
@@ -2030,7 +2030,7 @@ private:
     struct ViewMip { uint32_t width; uint32_t height; std::vector<uint8_t> data; };
     struct ViewTagg { std::string signature; std::vector<uint8_t> data; };
 
-    arma3::RvmatMaterial material;
+    a3tex::RvmatMaterial material;
     std::string materialSource;
     std::string materialStatus;
     int materialTemplate = 0;
@@ -2046,8 +2046,8 @@ private:
     char pixelFilter[64] = {0};
     char vertexFilter[64] = {0};
 
-    arma3::P3DInfo modelInfo;
-    arma3::ModelRenderer renderer;
+    a3tex::P3DInfo modelInfo;
+    a3tex::ModelRenderer renderer;
     std::string modelPath;
     std::string modelError;
     int modelLod = 0;
@@ -2062,8 +2062,8 @@ private:
     std::string viewError;
     std::vector<ViewMip> viewMips;
     std::vector<ViewTagg> viewTaggs;
-    arma3::PAAFormat viewFormat = arma3::PAAFormat::UNKNOWN;
-    arma3::SwizzleType viewSwizzle = arma3::SwizzleType::NONE;
+    a3tex::PAAFormat viewFormat = a3tex::PAAFormat::UNKNOWN;
+    a3tex::SwizzleType viewSwizzle = a3tex::SwizzleType::NONE;
     TexturePreview viewPreview;
     int viewLevel = 0;
     int viewMode = 0;

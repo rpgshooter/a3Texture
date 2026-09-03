@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace arma3 {
+namespace a3tex {
 
 struct PAATexture {
     bool valid = false;
@@ -27,7 +27,7 @@ struct PAALoader {
     static const char* GetTypeName(PAAFormat format);
 };
 
-} // namespace arma3
+} // namespace a3tex
 
 // The renderer logs through the host application's console; here it goes to
 // stderr, which keeps shader and texture failures visible.

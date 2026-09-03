@@ -11,7 +11,7 @@
 #include <vector>
 
 
-namespace arma3 {
+namespace a3tex {
 //=============================================================================
 // P3D Structures
 //=============================================================================
@@ -255,4 +255,4 @@ inline size_t ReadAsciizFromBuffer(const uint8_t* data, size_t offset, size_t ma
 void ParseODOLLodGeometry(const std::vector<uint8_t>& data, P3DLOD& lod, P3DInfo& info);
 P3DInfo ReadP3DInfo(const char* path);
 
-} // namespace arma3
+} // namespace a3tex

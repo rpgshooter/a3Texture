@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <map>
 
-namespace arma3 {
+namespace a3tex {
 
 namespace {
 
@@ -259,4 +259,4 @@ std::vector<std::string> ChannelPacker::presetNames() {
     return names;
 }
 
-} // namespace arma3
+} // namespace a3tex

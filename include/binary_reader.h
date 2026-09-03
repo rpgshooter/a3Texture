@@ -9,7 +9,7 @@
 #include <vector>
 
 
-namespace arma3 {
+namespace a3tex {
 // Safe binary data reader that tracks position and bounds.
 // Uses std::memcpy for type-safe reads instead of reinterpret_cast.
 class BinaryReader {
@@ -168,4 +168,4 @@ private:
 	size_t m_offset = 0;
 };
 
-} // namespace arma3
+} // namespace a3tex

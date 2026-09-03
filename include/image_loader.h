@@ -4,7 +4,7 @@
 #include <string>
 #include <cstdint>
 
-namespace arma3 {
+namespace a3tex {
 
 struct ImageData {
     uint32_t width;
@@ -35,4 +35,4 @@ private:
     static bool isTIFF(const std::string& filename);
 };
 
-} // namespace arma3
+} // namespace a3tex

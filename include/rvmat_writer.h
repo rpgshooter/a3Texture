@@ -5,7 +5,7 @@
 #include <map>
 #include <string>
 
-namespace arma3 {
+namespace a3tex {
 
 struct RvmatStage {
     std::string texture;               // file path or a procedural like #(argb,8,8,3)color(...)
@@ -48,4 +48,4 @@ RvmatMaterial materialForTextureSet(const std::string& anyTexturePath,
 
 std::string enginePath(const std::string& path, const std::string& driveRoot);
 
-} // namespace arma3
+} // namespace a3tex

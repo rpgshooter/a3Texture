@@ -8,7 +8,7 @@
 #include <vector>
 
 
-namespace arma3 {
+namespace a3tex {
 
 // Material properties from RVMAT
 struct MaterialProperties {
@@ -327,4 +327,4 @@ private:
 // Global renderer instance
 extern ModelRenderer g_ModelRenderer;
 
-} // namespace arma3
+} // namespace a3tex

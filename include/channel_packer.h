@@ -7,7 +7,7 @@
 #include <string>
 #include <cstdint>
 
-namespace arma3 {
+namespace a3tex {
 
 enum class PackChannel { R = 0, G = 1, B = 2, A = 3 };
 
@@ -66,4 +66,4 @@ private:
     uint32_t targetHeight = 0;
 };
 
-} // namespace arma3
+} // namespace a3tex

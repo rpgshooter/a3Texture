@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <memory>
 
-namespace arma3 {
+namespace a3tex {
 
 enum class Quality {
     Fast,
@@ -145,4 +145,4 @@ private:
     std::shared_ptr<std::istream> inputStream;
 };
 
-} // namespace arma3
+} // namespace a3tex

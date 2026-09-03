@@ -5,7 +5,7 @@
 #include <vector>
 #include <cstdint>
 
-namespace arma3 {
+namespace a3tex {
 namespace utils {
 
 // Read functions
@@ -72,4 +72,4 @@ inline void writeBytesAsArmaUShort(std::ostream& stream, uint32_t value) {
 }
 
 } // namespace utils
-} // namespace arma3
+} // namespace a3tex

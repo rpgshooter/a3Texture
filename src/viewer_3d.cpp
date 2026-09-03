@@ -6,7 +6,7 @@
 #include <sstream>
 
 
-namespace arma3 {
+namespace a3tex {
 
 //=============================================================================
 // OBJ Loading
@@ -577,4 +577,4 @@ bool ConvertP3DToMeshAnimated(const P3DLOD& lod, Mesh& mesh, const std::vector<s
 	return true;
 }
 
-} // namespace arma3
+} // namespace a3tex

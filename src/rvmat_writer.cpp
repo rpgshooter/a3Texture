@@ -9,7 +9,7 @@
 
 namespace fs = std::filesystem;
 
-namespace arma3 {
+namespace a3tex {
 
 namespace {
 
@@ -229,4 +229,4 @@ RvmatMaterial materialForTextureSet(const std::string& anyTexturePath,
     return material;
 }
 
-} // namespace arma3
+} // namespace a3tex

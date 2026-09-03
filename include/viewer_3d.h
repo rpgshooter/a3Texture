@@ -10,7 +10,7 @@
 #include <vector>
 
 
-namespace arma3 {
+namespace a3tex {
 
 //=============================================================================
 // Structures
@@ -91,4 +91,4 @@ bool ConvertP3DToMeshAnimated(const P3DLOD& lod, Mesh& mesh, const std::vector<s
 							  const std::vector<AnimationTransform>& transforms,
 							  std::map<std::string, int>* textureMap = nullptr);
 
-} // namespace arma3
+} // namespace a3tex

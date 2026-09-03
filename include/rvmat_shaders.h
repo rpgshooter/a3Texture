@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-namespace arma3 {
+namespace a3tex {
 
 struct ShaderInfo {
     const char* name;
@@ -266,4 +266,4 @@ inline const std::vector<MaterialType>& materialTypes() {
     return list;
 }
 
-} // namespace arma3
+} // namespace a3tex
