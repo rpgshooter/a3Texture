@@ -1611,9 +1611,9 @@ private:
         // Emissive runs well past 1 on glowing surfaces, so it is typed rather
         // than picked.
         ImGui::SetNextItemWidth(260);
-        ImGui::InputFloat4("Emissive", material.emissive.data());
+        ImGui::ColorEdit4("Emissive", material.emissive.data());
         ImGui::SetNextItemWidth(260);
-        ImGui::InputFloat4("Forced diffuse", material.forcedDiffuse.data());
+        ImGui::ColorEdit4("Forced diffuse", material.forcedDiffuse.data());
 
         ImGui::SetNextItemWidth(260);
         ImGui::DragFloat("Specular power", &material.specularPower, 1.0f, 1.0f, 1000.0f);
