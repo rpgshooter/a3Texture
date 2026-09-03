@@ -1,8 +1,8 @@
-#include "../include/paa.h"
-#include "../include/image_loader.h"
+#include "paa.h"
+#include "image_loader.h"
 #include "channel_packer.h"
-#include "../include/texture_role.h"
-#include "../include/job_runner.h"
+#include "texture_role.h"
+#include "job_runner.h"
 #include "p3d_reader.h"
 #include "rvmat_writer.h"
 

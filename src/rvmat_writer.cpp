@@ -1,5 +1,5 @@
 #include "rvmat_writer.h"
-#include "../include/texture_role.h"
+#include "texture_role.h"
 
 #include <algorithm>
 #include <cmath>

@@ -1,6 +1,6 @@
 #include "job_runner.h"
 #include "channel_packer.h"
-#include "../include/image_loader.h"
+#include "image_loader.h"
 #include "paa.h"
 
 #include <atomic>

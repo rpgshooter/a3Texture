@@ -1,12 +1,12 @@
 #include "paa.h"
-#include "../include/image_loader.h"
+#include "image_loader.h"
 #include "channel_packer.h"
 #include "texture_role.h"
-#include "../include/p3d_reader.h"
-#include "../include/viewer_3d.h"
+#include "p3d_reader.h"
+#include "viewer_3d.h"
 #include "model_renderer.h"
-#include "../include/rvmat_writer.h"
-#include "../include/rvmat_shaders.h"
+#include "rvmat_writer.h"
+#include "rvmat_shaders.h"
 #include "rvmat_parser.h"
 
 #include <imgui.h>
