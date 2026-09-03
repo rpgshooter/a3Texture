@@ -14,7 +14,7 @@
     "platform" : "!linux"
   }, "glad", "portable-file-dialogs", {
     "name" : "libsquish",
-    "version>=" : "1.15#15"
+    "version>=" : "1.15#14"
   } ],
   "builtin-baseline" : "271a5b8850aa50f9a40269cbf3cf414b36e333d6"
 }
