@@ -47,7 +47,12 @@ jobs:
       run: |
         where cl.exe || (echo MSVC not on PATH && exit /b 1)
 
-    - name: Configure
+    - name: Configure (Windows)
+      if: runner.os == 'Windows'
+      run: cmake --preset release -DVCPKG_TARGET_TRIPLET=x64-windows-static-md
+
+    - name: Configure (Linux)
+      if: runner.os == 'Linux'
       run: cmake --preset release
 
     - name: Build
