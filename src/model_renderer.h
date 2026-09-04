@@ -11,7 +11,7 @@
 namespace a3tex {
 
 // Material properties from RVMAT
-struct MaterialProperties {
+struct MaterialPropertiesModel {
 	float ambient[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 	float diffuse[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 	float specular[4] = {0.5f, 0.5f, 0.5f, 1.0f};
@@ -50,7 +50,7 @@ struct TextureSlot {
 	int width = 0;
 	int height = 0;
 	bool active = true;			  // Whether this texture is currently displayed
-	MaterialProperties material;  // Material properties from RVMAT
+	MaterialPropertiesModel material;  // Material properties from RVMAT
 };
 
 class ModelRenderer {
@@ -108,7 +108,7 @@ public:
 
 	// Used for sections with no material of their own, and for a model that
 	// carries no textures at all.
-	void SetDefaultMaterial(const MaterialProperties& material) {
+	void SetDefaultMaterial(const MaterialPropertiesModel& material) {
 		m_DefaultMaterial = material;
 	}
 
@@ -142,7 +142,7 @@ public:
 	void ClearTextureSlots();
 
 	// Get current material properties (from active slot or default)
-	const MaterialProperties& GetActiveMaterial() const;
+	const MaterialPropertiesModel& GetActiveMaterial() const;
 
 	// Camera getters
 	float GetCameraDistance() const { return m_CameraDistance; }
@@ -249,7 +249,7 @@ private:
 	GLint m_LocMatSpecularPower = -1;
 
 	// Default material properties
-	MaterialProperties m_DefaultMaterial;
+	MaterialPropertiesModel m_DefaultMaterial;
 	int m_ShaderStyle = 0;
 	GLint m_LocShaderStyle = -1;
 

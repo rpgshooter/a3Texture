@@ -194,8 +194,10 @@ void main() {
         specPower = max(1.0, specTex.b * specPower);
     }
 
-    float spec = pow(max(dot(normal, halfDir), 0.0), specPower);
-    vec3 specularLight = specColor * spec;
+    // Gated on the light reaching the surface at all, otherwise the highlight
+    // wraps onto faces turned away from the sun.
+    float spec = diff > 0.0 ? pow(max(dot(normal, halfDir), 0.0), specPower) : 0.0;
+    vec3 specularLight = specColor * spec * uLightColor;
 
     // Environment reflection (fake sky gradient)
     vec3 reflectDir = reflect(-viewDir, normal);
@@ -297,7 +299,10 @@ void main() {
         color = clamp(2.0 * detail * color, 0.0, 1.0);
     }
 
-    vec3 result = (ambientLight + diffuseLight + specularLight) * color + emissiveColor + envReflection;
+    // Specular reflects off the surface rather than tinting it, so it is added
+    // after the albedo. Folding it into the modulated term made highlights all
+    // but vanish on the dark textures most Arma props use.
+    vec3 result = (ambientLight + diffuseLight) * color + specularLight + emissiveColor + envReflection;
 
     FragColor = vec4(result, alpha);
 }
@@ -1332,7 +1337,7 @@ void ModelRenderer::Render() {
 	float specularPower[MAX_TEXTURE_SLOTS];
 
 	for (int i = 0; i < MAX_TEXTURE_SLOTS; i++) {
-		const MaterialProperties& mat =
+		const MaterialPropertiesModel& mat =
 			(i < static_cast<int>(m_TextureSlots.size()) && m_TextureSlots[i].material.hasRvmat)
 				? m_TextureSlots[i].material
 				: m_DefaultMaterial;
@@ -2185,6 +2190,19 @@ void ModelRenderer::ClearTextureSlots() {
 	}
 	m_TextureSlots.clear();
 	m_ActiveTextureSlot = -1;
+
+	// The shared stage maps belong to whichever model is loaded, so they go
+	// with the slots. Leaving them behind shaded the next model with the
+	// previous one's normal and specular maps.
+	for (GLuint* stage : {&m_NormalTexture, &m_SpecularTexture, &m_DetailTexture, &m_MacroTexture}) {
+		if (*stage != 0) {
+			glDeleteTextures(1, stage);
+			*stage = 0;
+		}
+	}
+	m_NormalPath.clear();
+	m_SpecularPath.clear();
+
 	LOG_INFO("Cleared all texture slots");
 }
 
@@ -2223,7 +2241,7 @@ ModelRenderer::ShaderStyle ModelRenderer::StyleForPixelShader(const std::string&
 	return ShaderStyle::Super;
 }
 
-const MaterialProperties& ModelRenderer::GetActiveMaterial() const {
+const MaterialPropertiesModel& ModelRenderer::GetActiveMaterial() const {
 	// Return material from first active texture slot that has RVMAT
 	for (const auto& slot : m_TextureSlots) {
 		if (slot.active && slot.material.hasRvmat) {
@@ -2356,7 +2374,7 @@ int ModelRenderer::AddTextureSlotWithMaterial(const std::string& path) {
 		std::string rvmatPath = FindRvmatPath(path);
 		if (!rvmatPath.empty()) {
 			LOG_INFO("Found RVMAT: " + rvmatPath);
-			auto material = rvmat::Parser::parseFile(rvmatPath);
+			auto material = a3tex::Parser::parseFile(rvmatPath);
 			if (material) {
 				slot.material.hasRvmat = true;
 				slot.material.rvmatPath = rvmatPath;
@@ -2384,13 +2402,13 @@ int ModelRenderer::AddTextureSlotWithMaterial(const std::string& path) {
 					try {
 						if (stageNum == 1 && !stage.texture.empty()) {
 							// Stage 1 is typically normal map
-							std::filesystem::path resolved = rvmat::resolveTexturePath(stage.texture, rvmatPath);
+							std::filesystem::path resolved = a3tex::resolveTexturePath(stage.texture, rvmatPath);
 							if (!resolved.empty() && std::filesystem::exists(resolved)) {
 								slot.normalPath = resolved.string();
 							}
 						} else if (stageNum == 2 && !stage.texture.empty()) {
 							// Stage 2 is typically specular/SMDI
-							std::filesystem::path resolved = rvmat::resolveTexturePath(stage.texture, rvmatPath);
+							std::filesystem::path resolved = a3tex::resolveTexturePath(stage.texture, rvmatPath);
 							if (!resolved.empty() && std::filesystem::exists(resolved)) {
 								slot.specularPath = resolved.string();
 							}
@@ -2423,27 +2441,21 @@ int ModelRenderer::AddTextureSlotWithMaterial(const std::string& path) {
 		LOG_ERROR("Error finding specular map: " + std::string(e.what()));
 	}
 
-	// Load normal map if found
+	// The shader carries one normal and one specular map for the whole model,
+	// so the first section that brings its own claims them. Uploading them into
+	// the slot instead left both maps sitting on the GPU with nothing bound to
+	// them, which is why an _smdi sitting next to the texture did nothing.
 	try {
-		if (!slot.normalPath.empty() && std::filesystem::exists(slot.normalPath)) {
-			PAATexture normalPaa = PAALoader::Load(slot.normalPath);
-			if (normalPaa.valid && PAALoader::Upload(normalPaa)) {
-				slot.normalId = normalPaa.textureId;
-				LOG_INFO("  Loaded normal map: " + std::filesystem::path(slot.normalPath).filename().string());
-			}
+		if (!slot.normalPath.empty() && m_NormalTexture == 0) {
+			LoadNormalTexture(slot.normalPath);
 		}
 	} catch (const std::exception& e) {
 		LOG_ERROR("Error loading normal map: " + std::string(e.what()));
 	}
 
-	// Load specular map if found
 	try {
-		if (!slot.specularPath.empty() && std::filesystem::exists(slot.specularPath)) {
-			PAATexture specPaa = PAALoader::Load(slot.specularPath);
-			if (specPaa.valid && PAALoader::Upload(specPaa)) {
-				slot.specularId = specPaa.textureId;
-				LOG_INFO("  Loaded specular map: " + std::filesystem::path(slot.specularPath).filename().string());
-			}
+		if (!slot.specularPath.empty() && m_SpecularTexture == 0) {
+			LoadSpecularTexture(slot.specularPath);
 		}
 	} catch (const std::exception& e) {
 		LOG_ERROR("Error loading specular map: " + std::string(e.what()));

@@ -7,7 +7,7 @@
 #include <iostream>
 #include <sstream>
 
-namespace rvmat {
+namespace a3tex {
 
 Parser::Lexer::Lexer(const std::string& source) : source(source) {}
 
@@ -809,4 +809,4 @@ bool generateRvmatForTexture(const std::string& texturePath, ObjectType type, co
 	return Parser::saveFile(m, outputPath);
 }
 
-}  // namespace rvmat
+}  // namespace a3tex

@@ -1,13 +1,14 @@
-#include "paa.h"
-#include "image_loader.h"
-#include "channel_packer.h"
-#include "texture_role.h"
-#include "p3d_reader.h"
-#include "viewer_3d.h"
-#include "model_renderer.h"
-#include "rvmat_writer.h"
-#include "rvmat_shaders.h"
-#include "rvmat_parser.h"
+#include "../paa.h"
+#include "../image_loader.h"
+#include "../channel_packer.h"
+#include "../texture_role.h"
+#include "../p3d_reader.h"
+#include "../viewer_3d.h"
+#include "../model_renderer.h"
+#include "../rvmat_writer.h"
+#include "../rvmat_shaders.h"
+#include "../rvmat_parser.h"
+#include "theme.h"
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -68,130 +69,29 @@ a3tex::ImageData downscaleTo(const a3tex::ImageData& src, uint32_t maxSide) {
         return src;
     }
 
-    const double scale = double(maxSide) / std::max(src.width, src.height);
+    const double scale = static_cast<double>(maxSide) / std::max(src.width, src.height);
     a3tex::ImageData out;
-    out.width = std::max(1u, uint32_t(src.width * scale));
-    out.height = std::max(1u, uint32_t(src.height * scale));
-    out.data.resize(size_t(out.width) * out.height * 4);
+    out.width = std::max(1u, static_cast<uint32_t>(src.width * scale));
+    out.height = std::max(1u, static_cast<uint32_t>(src.height * scale));
+    out.data.resize(static_cast<size_t>(out.width) * out.height * 4);
 
     for (uint32_t y = 0; y < out.height; y++) {
-        const uint32_t sy = std::min<uint32_t>(src.height - 1, uint32_t(y / scale));
+        const uint32_t sy = std::min<uint32_t>(src.height - 1, static_cast<uint32_t>(y / scale));
         for (uint32_t x = 0; x < out.width; x++) {
-            const uint32_t sx = std::min<uint32_t>(src.width - 1, uint32_t(x / scale));
+            const uint32_t sx = std::min<uint32_t>(src.width - 1, static_cast<uint32_t>(x / scale));
             for (int c = 0; c < 4; c++) {
-                out.data[(size_t(y) * out.width + x) * 4 + c] =
-                    src.data[(size_t(sy) * src.width + sx) * 4 + c];
+                out.data[(static_cast<size_t>(y) * out.width + x) * 4 + c] =
+                    src.data[(static_cast<size_t>(sy) * src.width + sx) * 4 + c];
             }
         }
     }
     return out;
 }
 
-// One palette, with every widget colour derived from it, so changing the
-// accent is one edit rather than twenty.
-struct Theme {
-    ImVec4 background{0.09f, 0.10f, 0.12f, 1.00f};
-    ImVec4 surface   {0.15f, 0.17f, 0.20f, 1.00f};
-    ImVec4 accent    {0.40f, 0.82f, 0.88f, 1.00f};
-    ImVec4 text      {0.88f, 0.90f, 0.93f, 1.00f};
-    ImVec4 muted     {0.55f, 0.60f, 0.66f, 1.00f};
-    ImVec4 good      {0.44f, 0.84f, 0.53f, 1.00f};
-    ImVec4 bad       {0.93f, 0.45f, 0.40f, 1.00f};
-};
-
-const Theme& theme() {
-    static const Theme instance;
-    return instance;
-}
-
-ImVec4 mix(const ImVec4& from, const ImVec4& to, float amount) {
-    return ImVec4(from.x + (to.x - from.x) * amount,
-                  from.y + (to.y - from.y) * amount,
-                  from.z + (to.z - from.z) * amount,
-                  from.w + (to.w - from.w) * amount);
-}
-
-// Positive lifts toward white, negative sinks toward the background.
-ImVec4 shade(const ImVec4& colour, float amount) {
-    const ImVec4 white(1.0f, 1.0f, 1.0f, colour.w);
-    return amount >= 0.0f ? mix(colour, white, amount)
-                          : mix(colour, theme().background, -amount);
-}
-
-void applyStyle() {
-    ImGuiStyle& style = ImGui::GetStyle();
-    style.WindowPadding = ImVec2(16, 14);
-    style.FramePadding = ImVec2(10, 6);
-    style.ItemSpacing = ImVec2(10, 8);
-    style.CellPadding = ImVec2(8, 6);
-    style.FrameRounding = 3.0f;
-    style.GrabRounding = 3.0f;
-    style.TabRounding = 3.0f;
-    style.ScrollbarRounding = 3.0f;
-    style.WindowBorderSize = 0.0f;
-    style.FrameBorderSize = 1.0f;
-
-    const Theme& t = theme();
-
-    // The accent reads as text at full strength and as a surface when sunk
-    // most of the way into the background.
-    const ImVec4 accentFill = shade(t.accent, -0.62f);
-    const ImVec4 accentPressed = shade(t.accent, -0.50f);
-
-    ImVec4* c = style.Colors;
-    c[ImGuiCol_Text]                 = t.text;
-    c[ImGuiCol_TextDisabled]         = t.muted;
-
-    c[ImGuiCol_WindowBg]             = t.background;
-    c[ImGuiCol_ChildBg]              = shade(t.background, 0.03f);
-    c[ImGuiCol_PopupBg]              = shade(t.background, 0.02f);
-    c[ImGuiCol_Border]               = shade(t.surface, 0.08f);
-
-    c[ImGuiCol_FrameBg]              = t.surface;
-    c[ImGuiCol_FrameBgHovered]       = shade(t.surface, 0.05f);
-    c[ImGuiCol_FrameBgActive]        = shade(t.surface, 0.09f);
-
-    c[ImGuiCol_Button]               = shade(t.surface, 0.03f);
-    c[ImGuiCol_ButtonHovered]        = shade(t.surface, 0.10f);
-    c[ImGuiCol_ButtonActive]         = accentPressed;
-
-    c[ImGuiCol_Header]               = accentFill;
-    c[ImGuiCol_HeaderHovered]        = shade(accentFill, 0.06f);
-    c[ImGuiCol_HeaderActive]         = shade(accentFill, 0.12f);
-
-    c[ImGuiCol_Tab]                  = shade(t.background, 0.05f);
-    c[ImGuiCol_TabHovered]           = shade(accentFill, 0.10f);
-    c[ImGuiCol_TabActive]            = accentFill;
-    c[ImGuiCol_TabUnfocused]         = shade(t.background, 0.03f);
-    c[ImGuiCol_TabUnfocusedActive]   = shade(accentFill, -0.30f);
-
-    c[ImGuiCol_TitleBg]              = t.background;
-    c[ImGuiCol_TitleBgActive]        = shade(t.background, 0.04f);
-
-    c[ImGuiCol_CheckMark]            = t.accent;
-    c[ImGuiCol_SliderGrab]           = shade(t.accent, -0.25f);
-    c[ImGuiCol_SliderGrabActive]     = t.accent;
-
-    c[ImGuiCol_ScrollbarBg]          = t.background;
-    c[ImGuiCol_ScrollbarGrab]        = shade(t.surface, 0.08f);
-    c[ImGuiCol_ScrollbarGrabHovered] = shade(t.surface, 0.16f);
-    c[ImGuiCol_ScrollbarGrabActive]  = accentPressed;
-
-    c[ImGuiCol_Separator]            = shade(t.surface, 0.06f);
-    c[ImGuiCol_PlotHistogram]        = shade(t.accent, -0.20f);
-    c[ImGuiCol_PlotLines]            = shade(t.accent, -0.20f);
-
-    c[ImGuiCol_TableHeaderBg]        = shade(t.background, 0.05f);
-    c[ImGuiCol_TableBorderLight]     = shade(t.surface, 0.05f);
-    c[ImGuiCol_TableBorderStrong]    = shade(t.surface, 0.12f);
-    c[ImGuiCol_TableRowBgAlt]        = shade(t.background, 0.02f);
-}
-
-// Named for meaning rather than colour, all taken from the palette.
-const ImVec4 kAccent = theme().accent;
-const ImVec4 kOk = theme().good;
-const ImVec4 kBad = theme().bad;
-const ImVec4 kDim = theme().muted;
+const ImVec4 kAccent = a3tex::Theme::theme().accent;
+const ImVec4 kOk = a3tex::Theme::theme().good;
+const ImVec4 kBad = a3tex::Theme::theme().bad;
+const ImVec4 kDim = a3tex::Theme::theme().muted;
 
 inline std::string resolveModelTexture(const std::string& reference,
                                        const std::string& modelDir,
@@ -890,7 +790,7 @@ private:
         for (int i = 0; i < 5; i++) {
             if (i) ImGui::SameLine();
             const bool active = previewMode == i;
-            if (active) ImGui::PushStyleColor(ImGuiCol_Button, shade(theme().accent, -0.62f));
+            if (active) ImGui::PushStyleColor(ImGuiCol_Button, shade(a3tex::Theme::theme().accent, -0.62f));
             if (ImGui::Button(labels[i], ImVec2(52, 0))) previewMode = i;
             if (active) ImGui::PopStyleColor();
         }
@@ -1305,6 +1205,13 @@ private:
         missingTextures.clear();
         textureRefs.clear();
         loadedTextures = 0;
+
+        // ClearTextureSlots drops the shared stage maps too, so an open
+        // material has to push its stages again rather than assume they stuck.
+        appliedNormal.clear();
+        appliedSpecular.clear();
+        appliedDetail.clear();
+        appliedMacro.clear();
 
         const std::string modelDir = fs::path(modelPath).parent_path().string();
 
@@ -1780,7 +1687,7 @@ private:
     }
 
     void openRvmat(const std::string& path) {
-        auto parsed = rvmat::Parser::parseFile(path);
+        auto parsed = a3tex::Parser::parseFile(path);
         if (!parsed) {
             materialStatus = "Could not read that material";
             return;
@@ -1811,8 +1718,8 @@ private:
 
     // Colours are cheap enough to push every frame; textures are only touched
     // when the stage actually points somewhere new.
-    a3tex::MaterialProperties asRendererMaterial() const {
-        a3tex::MaterialProperties properties;
+    a3tex::MaterialPropertiesModel asRendererMaterial() const {
+        a3tex::MaterialPropertiesModel properties;
         for (int c = 0; c < 4; c++) {
             properties.ambient[c] = material.ambient[c];
             properties.diffuse[c] = material.diffuse[c];
@@ -1825,7 +1732,7 @@ private:
     }
 
     void applyMaterialToModel(bool quiet) {
-        const a3tex::MaterialProperties properties = asRendererMaterial();
+        const a3tex::MaterialPropertiesModel properties = asRendererMaterial();
         auto& slots = renderer.GetTextureSlotsMutable();
 
         appliedSections = 0;

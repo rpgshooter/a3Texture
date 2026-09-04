@@ -82,7 +82,7 @@ target_include_directories(a3texture-cli PRIVATE ${Stb_INCLUDE_DIR} ${LZO_INCLUD
 # GUI Application
 #=============================================================================
 set(GUI_SOURCES
-    src/gui_main.cpp
+        src/gui/gui_main.cpp
     src/paa.cpp
     src/image_loader.cpp
     src/channel_packer.cpp
@@ -94,6 +94,7 @@ set(GUI_SOURCES
     src/model_renderer.cpp
     src/paa_texture.cpp
     src/rvmat_parser.cpp
+        src/gui/theme.h
 )
 
 add_executable(a3texture-gui ${GUI_SOURCES})

@@ -8,7 +8,7 @@
 #include <variant>
 #include <vector>
 
-namespace rvmat {
+namespace a3tex {
 
 // Color with alpha (RGBA)
 struct Color4 {
@@ -156,7 +156,7 @@ private:
 std::filesystem::path resolveTexturePath(const std::string& texturePath, const std::filesystem::path& materialPath);
 
 // MaterialProperties for undo/redo system (copyable subset of Material)
-struct MaterialProperties {
+struct MaterialPropertiesRvmat {
 	std::array<float, 4> ambient = {1, 1, 1, 1};
 	std::array<float, 4> diffuse = {1, 1, 1, 1};
 	std::array<float, 4> forcedDiffuse = {0, 0, 0, 0};
