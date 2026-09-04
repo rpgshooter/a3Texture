@@ -33,6 +33,12 @@ jobs:
       if: runner.os == 'Windows'
       uses: ilammy/msvc-dev-cmd@v1
 
+      - name: Setup vcpkg cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.os == 'Windows' && '~/AppData/Local/vcpkg/archives' || '~/.cache/vcpkg/archives' }}
+        key: vcpkg-${{ matrix.os }}-${{ hashFiles('vcpkg.json') }}
+
     - name: Bootstrap vcpkg (Linux)
       if: runner.os == 'Linux'
       run: ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
