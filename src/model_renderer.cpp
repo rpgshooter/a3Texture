@@ -1907,6 +1907,19 @@ bool ModelRenderer::LoadNormalTexture(const std::string& path) {
 		return false;
 	}
 
+	// A tagged _nohq stores the engine's layout rather than a plain normal:
+	// red is zeroed and X lives inverted in alpha, so that DXT5's alpha block
+	// carries it at full precision. Undo it here and the shader keeps reading
+	// a straightforward RGB normal. Files with no SWIZ tagg, as most hand
+	// authored ones are, already hold one and are left alone.
+	if (paa.swizzle == SwizzleType::NOHQ) {
+		for (size_t i = 0; i + 3 < paa.pixels.size(); i += 4) {
+			paa.pixels[i] = static_cast<uint8_t>(255 - paa.pixels[i + 3]);
+			paa.pixels[i + 3] = 255;
+		}
+		LOG_INFO("  Unswizzled a tagged _nohq normal map");
+	}
+
 	if (!PAALoader::Upload(paa)) {
 		LOG_ERROR("Failed to upload normal map to GPU");
 		return false;
@@ -2406,8 +2419,9 @@ int ModelRenderer::AddTextureSlotWithMaterial(const std::string& path) {
 							if (!resolved.empty() && std::filesystem::exists(resolved)) {
 								slot.normalPath = resolved.string();
 							}
-						} else if (stageNum == 2 && !stage.texture.empty()) {
-							// Stage 2 is typically specular/SMDI
+						} else if (stageNum == 5 && !stage.texture.empty()) {
+							// Stage 5 is the SMDI. Stage 2 is the detail map,
+							// which this used to read as the specular one.
 							std::filesystem::path resolved = a3tex::resolveTexturePath(stage.texture, rvmatPath);
 							if (!resolved.empty() && std::filesystem::exists(resolved)) {
 								slot.specularPath = resolved.string();
@@ -2435,7 +2449,8 @@ int ModelRenderer::AddTextureSlotWithMaterial(const std::string& path) {
 	// Try to find specular map by naming convention if not in RVMAT
 	try {
 		if (slot.specularPath.empty()) {
-			slot.specularPath = FindRelatedTexture(path, {"_smdi", "_SMDI", "_as", "_AS"});
+			// Only _smdi: _as is the ambient shadow map, not a specular one.
+			slot.specularPath = FindRelatedTexture(path, {"_smdi", "_SMDI"});
 		}
 	} catch (const std::exception& e) {
 		LOG_ERROR("Error finding specular map: " + std::string(e.what()));

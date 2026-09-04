@@ -21,6 +21,7 @@ PAATexture PAALoader::Load(const std::string& path) {
         texture.width = mip.width;
         texture.height = mip.height;
         texture.type = paa.getFormat();
+        texture.swizzle = paa.getSwizzle();
         texture.pixels = mip.data;
         texture.valid = true;
     }
