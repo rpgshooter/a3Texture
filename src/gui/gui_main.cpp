@@ -93,6 +93,18 @@ const ImVec4 kOk = a3tex::Theme::theme().good;
 const ImVec4 kBad = a3tex::Theme::theme().bad;
 const ImVec4 kDim = a3tex::Theme::theme().muted;
 
+// Floors for the Material tab's draggable panes, so neither side of a
+// divider can be dragged away entirely.
+constexpr float kMinPreview = 120.0f;
+constexpr float kMinRvmatText = 90.0f;
+
+// The panels holding these are resizable, so a width is a ceiling rather
+// than a fixed size: past it the item takes what is left instead of
+// overflowing its panel into a scrollbar.
+void itemWidth(float desired) {
+    ImGui::SetNextItemWidth(std::min(desired, ImGui::GetContentRegionAvail().x));
+}
+
 inline std::string resolveModelTexture(const std::string& reference,
                                        const std::string& modelDir,
                                        const std::string& driveRoot) {
@@ -1480,13 +1492,29 @@ private:
         ImGui::Separator();
         ImGui::Spacing();
 
-        // Negative item widths measure against the content region, so the two
-        // columns have to be real children or the editor eats the preview.
-        const float total = ImGui::GetContentRegionAvail().x;
-        const float previewWidth = std::max(340.0f, total * 0.42f);
-        const float editorWidth = std::max(360.0f, total - previewWidth - 12.0f);
+        // A resizable table rather than two sized children, so the divider can be
+        // dragged and ImGui keeps the width in imgui.ini between runs. The panes
+        // stay children, since negative item widths measure against a content
+        // region and each needs its own, and they carry an explicit height
+        // because a table row would otherwise size itself to its content. That
+        // height gives back the cell padding the row sits inside, and the table's
+        // own outer height is pinned, so neither can push the tab into scrolling.
+        const float available = ImGui::GetContentRegionAvail().y;
+        const float paneHeight =
+            std::max(1.0f, available - ImGui::GetStyle().CellPadding.y * 2.0f);
 
-        ImGui::BeginChild("materialEditor", ImVec2(editorWidth, 0), false);
+        if (!ImGui::BeginTable("materialSplit", 2,
+                ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV |
+                ImGuiTableFlags_SizingStretchProp,
+                ImVec2(0.0f, available))) {
+            return;
+        }
+        ImGui::TableSetupColumn("editor", ImGuiTableColumnFlags_WidthStretch, 0.58f);
+        ImGui::TableSetupColumn("preview", ImGuiTableColumnFlags_WidthStretch, 0.42f);
+        ImGui::TableNextRow();
+
+        ImGui::TableSetColumnIndex(0);
+        ImGui::BeginChild("materialEditor", ImVec2(0, paneHeight), false);
 
         std::string items;
         for (const auto& type : a3tex::materialTypes()) {
@@ -1495,7 +1523,7 @@ private:
         }
         items.push_back('\0');
 
-        ImGui::SetNextItemWidth(300);
+        itemWidth(300);
         if (ImGui::Combo("Material type", &materialTemplate, items.c_str())) {
             const auto& types = a3tex::materialTypes();
             if (materialTemplate >= 0 && materialTemplate < int(types.size())) {
@@ -1508,30 +1536,30 @@ private:
         }
 
         ImGui::Spacing();
-        ImGui::SetNextItemWidth(300);
+        itemWidth(300);
         ImGui::ColorEdit4("Ambient", material.ambient.data(), ImGuiColorEditFlags_Float);
-        ImGui::SetNextItemWidth(300);
+        itemWidth(300);
         ImGui::ColorEdit4("Diffuse", material.diffuse.data(), ImGuiColorEditFlags_Float);
-        ImGui::SetNextItemWidth(300);
+        itemWidth(300);
         ImGui::ColorEdit4("Specular", material.specular.data(), ImGuiColorEditFlags_Float);
 
         // Emissive runs well past 1 on glowing surfaces, so it is typed rather
         // than picked.
-        ImGui::SetNextItemWidth(260);
+        itemWidth(260);
         ImGui::ColorEdit4("Emissive", material.emissive.data());
-        ImGui::SetNextItemWidth(260);
+        itemWidth(260);
         ImGui::ColorEdit4("Forced diffuse", material.forcedDiffuse.data());
 
-        ImGui::SetNextItemWidth(260);
+        itemWidth(260);
         ImGui::DragFloat("Specular power", &material.specularPower, 1.0f, 1.0f, 1000.0f);
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Rough 10-50, normal 50-150, shiny 150-500, mirror 500+");
         }
 
-        ImGui::SetNextItemWidth(300);
+        itemWidth(300);
         shaderCombo("Pixel shader", material.pixelShaderID, a3tex::pixelShaders(),
                     pixelFilter, sizeof(pixelFilter));
-        ImGui::SetNextItemWidth(300);
+        itemWidth(300);
         shaderCombo("Vertex shader", material.vertexShaderID, a3tex::vertexShaders(),
                     vertexFilter, sizeof(vertexFilter));
 
@@ -1598,7 +1626,7 @@ private:
             slotItems.push_back('\0');
 
             int choice = materialSlot + 1;
-            ImGui::SetNextItemWidth(300);
+            itemWidth(300);
             if (ImGui::Combo("Applies to", &choice, slotItems.c_str())) {
                 materialSlot = choice - 1;
             }
@@ -1636,15 +1664,21 @@ private:
 
         ImGui::EndChild();
 
-        ImGui::SameLine();
-
-        ImGui::BeginChild("materialPreview", ImVec2(0, 0), false);
+        ImGui::TableSetColumnIndex(1);
+        ImGui::BeginChild("materialPreview", ImVec2(0, paneHeight), false);
 
         // Editing here while the model sits on another tab means never seeing
         // the change, so the model is drawn alongside when one is loaded.
         if (renderer.IsInitialized() && renderer.HasMesh()) {
             const float width = ImGui::GetContentRegionAvail().x;
-            const float height = std::min(320.0f, ImGui::GetContentRegionAvail().y * 0.45f);
+
+            // Tables resize columns but not rows, so this divider is hand rolled.
+            // Both sides keep a floor, and the model yields first when the pane
+            // is too short to honour them.
+            const float grip = 6.0f;
+            const float room = ImGui::GetContentRegionAvail().y - grip;
+            const float height = std::clamp(materialPreviewHeight, kMinPreview,
+                                            std::max(kMinPreview, room - kMinRvmatText));
 
             renderer.SetViewportSize(int(width), int(height));
             renderer.Render();
@@ -1661,7 +1695,26 @@ private:
                     renderer.AdjustCameraDistance(-io.MouseWheel * 0.4f);
                 }
             }
-            ImGui::Spacing();
+
+            // Drag anywhere along the gap to trade height with the text below.
+            ImGui::InvisibleButton("##previewSplit", ImVec2(width, grip));
+            const bool gripped = ImGui::IsItemActive();
+            if (gripped || ImGui::IsItemHovered()) {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+            }
+            if (gripped) {
+                materialPreviewHeight = height + ImGui::GetIO().MouseDelta.y;
+            }
+
+            // Without a mark the gap reads as dead space rather than a handle.
+            const ImVec2 from = ImGui::GetItemRectMin();
+            const ImVec2 to = ImGui::GetItemRectMax();
+            const float mid = (from.y + to.y) * 0.5f;
+            ImGui::GetWindowDrawList()->AddLine(
+                ImVec2(from.x, mid), ImVec2(to.x, mid),
+                ImGui::GetColorU32(gripped || ImGui::IsItemHovered()
+                                       ? ImGuiCol_SeparatorActive
+                                       : ImGuiCol_Separator));
         }
 
         ImGui::TextColored(kDim, "This is what gets written");
@@ -1670,6 +1723,8 @@ private:
                                   ImVec2(-1, ImGui::GetContentRegionAvail().y - 4),
                                   ImGuiInputTextFlags_ReadOnly);
         ImGui::EndChild();
+
+        ImGui::EndTable();
     }
 
     // Stages have fixed meanings, so name them rather than number them.
@@ -1945,6 +2000,7 @@ private:
     bool materialActive = false;
     bool materialLive = true;
     int materialSlot = -1;   // -1 applies to every section
+    float materialPreviewHeight = 320.0f;   // model against rvmat text, dragged
     int appliedSections = 0;
     std::string appliedNormal;
     std::string appliedSpecular;
