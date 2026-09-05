@@ -10,6 +10,11 @@
 #include "../rvmat_parser.h"
 #include "theme.h"
 
+// Set by CMake from git describe; only missing if built outside the project.
+#ifndef A3TEX_VERSION
+#define A3TEX_VERSION "unknown"
+#endif
+
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
@@ -2060,7 +2065,7 @@ int main(int, char**) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* window = glfwCreateWindow(1180, 820, "a3Texture",
+    GLFWwindow* window = glfwCreateWindow(1180, 820, "a3Texture " A3TEX_VERSION,
                                           nullptr, nullptr);
     if (!window) {
         glfwTerminate();

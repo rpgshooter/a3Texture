@@ -3,6 +3,7 @@ name: Build
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -20,6 +21,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
+        fetch-depth: 0   # git describe needs tags, a shallow clone has none
 
     - name: Install Linux build dependencies
       if: runner.os == 'Linux'
@@ -84,7 +86,9 @@ jobs:
           build/release/a3texture-gui.exe
         if-no-files-found: ignore
 
-  release:
+  # Overwritten on every push to main. Prerelease, so GitHub's "Latest" badge
+  # never points here and the page keeps one entry rather than one per build.
+  nightly:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [build]
     runs-on: ubuntu-latest
@@ -92,39 +96,42 @@ jobs:
       contents: write
 
     steps:
-    - name: Download Windows CLI
-      uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v4
       with:
-        name: a3texture-cli-Windows
-        path: windows-cli
+        path: dist
+        merge-multiple: true
 
-    - name: Download Windows GUI
-      uses: actions/download-artifact@v4
-      with:
-        name: a3texture-gui-Windows
-        path: windows-gui
+    # The tag has to move to the new commit and updating a release in place
+    # leaves it on the old one, so the whole thing is replaced.
+    - name: Replace the previous nightly
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: gh release delete nightly --cleanup-tag -y --repo ${{ github.repository }} || true
 
-    - name: Download Linux CLI
-      uses: actions/download-artifact@v4
+    - uses: softprops/action-gh-release@v2
       with:
-        name: a3texture-cli-Linux
-        path: linux-cli
+        tag_name: nightly
+        name: Nightly (${{ github.sha }})
+        prerelease: true
+        files: dist/*
 
-    - name: Download Linux GUI
-      uses: actions/download-artifact@v4
-      with:
-        name: a3texture-gui-Linux
-        path: linux-gui
+  # Cut by hand: git tag v1.1.0 && git push a3Texture v1.1.0
+  stable:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
+    steps:
+    - uses: actions/download-artifact@v4
       with:
-        tag_name: v${{ github.run_number }}
-        name: Build ${{ github.run_number }}
-        draft: false
-        prerelease: false
-        files: |
-          windows-cli/a3texture-cli.exe
-          windows-gui/a3texture-gui.exe
-          linux-cli/a3texture-cli
-          linux-gui/a3texture-gui
+        path: dist
+        merge-multiple: true
+
+    - uses: softprops/action-gh-release@v2
+      with:
+        name: ${{ github.ref_name }}
+        generate_release_notes: true
+        make_latest: true
+        files: dist/*

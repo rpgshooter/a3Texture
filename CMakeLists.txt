@@ -6,6 +6,21 @@ endif()
 
 project(A3Texture VERSION 1.0.0 LANGUAGES C CXX)
 
+# Reported by --version, so a bug report says which build it came from.
+# git describe gives v1.1.0 exactly on a tag and v1.1.0-14-gabc1234 fourteen
+# commits later, which distinguishes a stable from a nightly on sight. This
+# runs at configure time, so a local build that is not reconfigured will show
+# a stale hash; CI configures fresh every run.
+execute_process(COMMAND git describe --tags --always --dirty
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE A3TEX_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
+if(NOT A3TEX_VERSION)
+    set(A3TEX_VERSION "unknown")
+endif()
+message(STATUS "a3texture version: ${A3TEX_VERSION}")
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -67,6 +82,7 @@ set(HEADERS
 # CLI Executable
 #=============================================================================
 add_executable(a3texture-cli ${SOURCES} ${HEADERS})
+target_compile_definitions(a3texture-cli PRIVATE A3TEX_VERSION="${A3TEX_VERSION}")
 
 target_link_libraries(a3texture-cli PRIVATE
     unofficial::libsquish::squish
@@ -98,6 +114,7 @@ set(GUI_SOURCES
 )
 
 add_executable(a3texture-gui ${GUI_SOURCES})
+target_compile_definitions(a3texture-gui PRIVATE A3TEX_VERSION="${A3TEX_VERSION}")
 
 target_link_libraries(a3texture-gui PRIVATE
     unofficial::libsquish::squish

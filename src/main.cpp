@@ -22,8 +22,13 @@
 
 namespace fs = std::filesystem;
 //TODO: main.cpp, line 24, should probably rework this stupid std::cout spam
+// Set by CMake from git describe; only missing if built outside the project.
+#ifndef A3TEX_VERSION
+#define A3TEX_VERSION "unknown"
+#endif
+
 void printUsage(const char* programName) {
-    std::cout << "A3Texture \n";
+    std::cout << "A3Texture " << A3TEX_VERSION << "\n";
     std::cout << "==========================================\n\n";
     std::cout << "Usage:\n";
     std::cout << "  " << programName << " <input> <output> [options]\n\n";
@@ -698,6 +703,18 @@ int main(int argc, char** argv) {
     if (argc < 2) {
         printUsage(argv[0]);
         return 1;
+    }
+
+    // Asked for by itself this is a question, not a failure, so it reports
+    // the version alone and exits clean for anything reading it.
+    const std::string first = argv[1];
+    if (first == "--version" || first == "-v" || first == "version") {
+        std::cout << A3TEX_VERSION << "\n";
+        return 0;
+    }
+    if (first == "--help" || first == "-h" || first == "help") {
+        printUsage(argv[0]);
+        return 0;
     }
 
     if (std::string(argv[1]) == "rvmat") {
