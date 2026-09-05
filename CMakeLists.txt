@@ -11,7 +11,10 @@ project(A3Texture VERSION 1.0.0 LANGUAGES C CXX)
 # commits later, which distinguishes a stable from a nightly on sight. This
 # runs at configure time, so a local build that is not reconfigured will show
 # a stale hash; CI configures fresh every run.
-execute_process(COMMAND git describe --tags --always --dirty
+# Matched against semver tags only. The nightly release retags the same commit
+# a stable is cut from, and a bare --tags picks that up, so a tagged build
+# would otherwise report its version as "nightly".
+execute_process(COMMAND git describe --tags --always --dirty --match v[0-9]*.[0-9]*.[0-9]*
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     OUTPUT_VARIABLE A3TEX_VERSION
     OUTPUT_STRIP_TRAILING_WHITESPACE
