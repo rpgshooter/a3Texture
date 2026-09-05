@@ -6,14 +6,7 @@ endif()
 
 project(A3Texture VERSION 1.0.0 LANGUAGES C CXX)
 
-# Reported by --version, so a bug report says which build it came from.
-# git describe gives v1.1.0 exactly on a tag and v1.1.0-14-gabc1234 fourteen
-# commits later, which distinguishes a stable from a nightly on sight. This
-# runs at configure time, so a local build that is not reconfigured will show
-# a stale hash; CI configures fresh every run.
-# Matched against semver tags only. The nightly release retags the same commit
-# a stable is cut from, and a bare --tags picks that up, so a tagged build
-# would otherwise report its version as "nightly".
+# Version for --version, resolved at configure time.
 execute_process(COMMAND git describe --tags --always --dirty --match v[0-9]*.[0-9]*.[0-9]*
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     OUTPUT_VARIABLE A3TEX_VERSION
