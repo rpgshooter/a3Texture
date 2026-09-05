@@ -14,13 +14,53 @@ And more
 - **DXT Compression** - DXT1 (no alpha) and DXT5 (with alpha)
 - **LZO Compression** - Automatic LZO compression for large mipmaps (>128px)
 
+## Download
+
+Prebuilt binaries for Windows and Linux are on the
+[releases page](https://github.com/rpgshooter/a3Texture/releases). Nothing to
+install: download, and on Linux mark it executable with `chmod +x`.
+
+There are two to choose from.
+
+| Build | What it is | When to take it |
+|---|---|---|
+| **Latest release** (`v1.0.0`) | Cut by hand, tested | Start here |
+| **Nightly** | Rebuilt on every commit | You want a fix or feature that is not in a release yet |
+
+The nightly is marked as a pre-release, so the version GitHub highlights as
+"Latest" is always the stable one. The nightly sits directly below it and is
+replaced each time, so it is always the current state of `main` — newer, and
+correspondingly less tested.
+
+Each release carries four files. Take the GUI unless you are scripting:
+
+| File | Platform | Kind |
+|---|---|---|
+| `a3texture-gui.exe` | Windows | Windowed app |
+| `a3texture-gui` | Linux | Windowed app |
+| `a3texture-cli.exe` | Windows | Command line |
+| `a3texture-cli` | Linux | Command line |
+
+Every build knows what it is, which is worth quoting in a bug report:
+
+```bash
+a3texture-cli --version
+```
+
+A release prints its version plainly, `v1.0.0`. A nightly prints the release it
+followed, how many commits it is past it, and the commit itself —
+`v1.0.0-14-gabc1234` is fourteen commits after v1.0.0.
+
 ## Requirements
+
+Only needed to build from source. To just use the tool, see
+[Download](#download) above.
 
 - CMake 3.20+
 - C++17 compiler (MSVC, GCC, or Clang)
 - vcpkg (for dependency management)
 
-## Installation
+## Building from source
 
 ### 1. Install vcpkg
 
