@@ -55,8 +55,6 @@ set(SOURCES
     src/job_runner.cpp
     src/p3d_reader.cpp
     src/rvmat_writer.cpp
-    # The CLI drops into the GUI when started without arguments, so it needs
-    # the same sources the standalone GUI builds from.
     src/gui/gui_main.cpp
     src/viewer_3d.cpp
     src/model_renderer.cpp
@@ -80,15 +78,19 @@ set(HEADERS
         src/binary_reader.h
         src/utils.h
         src/gui/gui_main.h
+        src/gui/theme.h
 )
 
 #=============================================================================
-# CLI Executable
+# Executable
+#
+# One binary for both front ends: it opens the GUI when started without
+# arguments and behaves as a CLI when given any.
 #=============================================================================
-add_executable(a3texture-cli ${SOURCES} ${HEADERS})
-target_compile_definitions(a3texture-cli PRIVATE A3TEX_VERSION="${A3TEX_VERSION}")
+add_executable(a3texture ${SOURCES} ${HEADERS})
+target_compile_definitions(a3texture PRIVATE A3TEX_VERSION="${A3TEX_VERSION}")
 
-target_link_libraries(a3texture-cli PRIVATE
+target_link_libraries(a3texture PRIVATE
     unofficial::libsquish::squish
     PNG::PNG
     TIFF::TIFF
@@ -99,54 +101,14 @@ target_link_libraries(a3texture-cli PRIVATE
     glad::glad
 )
 
-target_include_directories(a3texture-cli PRIVATE
-    ${Stb_INCLUDE_DIR}
-    ${PORTABLE_FILE_DIALOGS_INCLUDE_DIRS}
-    ${LZO_INCLUDE_DIR}
-)
-
-#=============================================================================
-# GUI Application
-#=============================================================================
-set(GUI_SOURCES
-        src/gui/gui_entry.cpp
-        src/gui/gui_main.cpp
-    src/paa.cpp
-    src/image_loader.cpp
-    src/channel_packer.cpp
-    src/texture_role.cpp
-    src/job_runner.cpp
-    src/p3d_reader.cpp
-    src/rvmat_writer.cpp
-    src/viewer_3d.cpp
-    src/model_renderer.cpp
-    src/paa_texture.cpp
-    src/rvmat_parser.cpp
-        src/gui/theme.h
-        src/gui/gui_main.h
-)
-
-add_executable(a3texture-gui ${GUI_SOURCES})
-target_compile_definitions(a3texture-gui PRIVATE A3TEX_VERSION="${A3TEX_VERSION}")
-
-target_link_libraries(a3texture-gui PRIVATE
-    unofficial::libsquish::squish
-    PNG::PNG
-    TIFF::TIFF
-    ${LZO_LIBRARY}
-    imgui::imgui
-    glfw
-    glad::glad
-)
-
-target_include_directories(a3texture-gui PRIVATE
+target_include_directories(a3texture PRIVATE
     ${Stb_INCLUDE_DIR}
     ${PORTABLE_FILE_DIALOGS_INCLUDE_DIRS}
     ${LZO_INCLUDE_DIR}
 )
 
 # Installation
-install(TARGETS a3texture-cli a3texture-gui DESTINATION bin)
+install(TARGETS a3texture DESTINATION bin)
 
 message(STATUS "Configuration:")
 message(STATUS "  Platform: ${CMAKE_SYSTEM_NAME}")

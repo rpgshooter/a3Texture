@@ -32,19 +32,19 @@ The nightly is marked as a pre-release, so the version GitHub highlights as
 replaced each time, so it is always the current state of `main` — newer, and
 correspondingly less tested.
 
-Each release carries four files. Take the GUI unless you are scripting:
+Each release carries one file per platform. The same binary is both front
+ends: run it with no arguments and it opens the window, pass it any argument
+and it behaves as a command line tool.
 
-| File | Platform | Kind |
-|---|---|---|
-| `a3texture-gui.exe` | Windows | Windowed app |
-| `a3texture-gui` | Linux | Windowed app |
-| `a3texture-cli.exe` | Windows | Command line |
-| `a3texture-cli` | Linux | Command line |
+| File | Platform |
+|---|---|
+| `a3texture.exe` | Windows |
+| `a3texture` | Linux |
 
 Every build knows what it is, which is worth quoting in a bug report:
 
 ```bash
-a3texture-cli --version
+a3texture --version
 ```
 
 A release prints its version plainly, `v1.0.0`. A nightly prints the release it
@@ -98,8 +98,10 @@ vcpkg will automatically install all dependencies:
 
 ### GUI Application
 
+Start it without arguments:
+
 ```bash
-./build/Release/a3texture-gui.exe
+./build/Release/a3texture.exe
 ```
 
 Features:
@@ -110,15 +112,17 @@ Features:
 
 ### CLI Tool
 
+Any argument at all keeps it in the terminal.
+
 **Single file:**
 ```bash
-a3texture-cli texture.png texture.paa
-a3texture-cli texture.png texture.paa --format DXT5
+a3texture texture.png texture.paa
+a3texture texture.png texture.paa --format DXT5
 ```
 
 **Batch conversion:**
 ```bash
-a3texture-cli --batch "*.png" --output-dir ./paa/
+a3texture --batch "*.png" --output-dir ./paa/
 ```
 
 ## Technical Details

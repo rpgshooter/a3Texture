@@ -68,23 +68,14 @@ jobs:
     - name: Build
       run: cmake --build --preset release
 
-    - name: Upload CLI artifact
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: a3texture-cli-${{ runner.os }}
+        name: a3texture-${{ runner.os }}
         path: |
-          build/release/a3texture-cli
-          build/release/a3texture-cli.exe
-        if-no-files-found: ignore
-
-    - name: Upload GUI artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: a3texture-gui-${{ runner.os }}
-        path: |
-          build/release/a3texture-gui
-          build/release/a3texture-gui.exe
-        if-no-files-found: ignore
+          build/release/a3texture
+          build/release/a3texture.exe
+        if-no-files-found: error
 
   # Overwritten on every push to main. Prerelease, so GitHub's "Latest" badge
   # never points here and the page keeps one entry rather than one per build.
