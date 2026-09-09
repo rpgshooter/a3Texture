@@ -30,7 +30,7 @@ void ensureLzoInit() {
 }
 
 size_t dxtDataSize(PAAFormat format, uint32_t width, uint32_t height) {
-    const size_t blocks = size_t((width + 3) / 4) * ((height + 3) / 4);
+    const size_t blocks = static_cast<size_t>((width + 3) / 4) * ((height + 3) / 4);
     return blocks * (format == PAAFormat::DXT1 ? 8 : 16);
 }
 
@@ -288,11 +288,11 @@ void PAA::calculateMipmapsAndTaggs() {
                 const uint32_t sx = x * 2;
                 const uint32_t sy = y * 2;
 
-                const size_t p1 = (size_t(sy) * curWidth + sx) * 4;
-                const size_t p2 = (size_t(sy) * curWidth + sx + 1) * 4;
-                const size_t p3 = (size_t(sy + 1) * curWidth + sx) * 4;
-                const size_t p4 = (size_t(sy + 1) * curWidth + sx + 1) * 4;
-                const size_t out = (size_t(y) * newWidth + x) * 4;
+                const size_t p1 = (static_cast<size_t>(sy) * curWidth + sx) * 4;
+                const size_t p2 = (static_cast<size_t>(sy) * curWidth + sx + 1) * 4;
+                const size_t p3 = (static_cast<size_t>(sy + 1) * curWidth + sx) * 4;
+                const size_t p4 = (static_cast<size_t>(sy + 1) * curWidth + sx + 1) * 4;
+                const size_t out = (static_cast<size_t>(y) * newWidth + x) * 4;
 
                 for (int c = 0; c < 3; c++) {
                     const float sum = toLinear[srcData[p1 + c]] + toLinear[srcData[p2 + c]] +
@@ -329,12 +329,12 @@ void PAA::calculateMipmapsAndTaggs() {
     }
 
     const uint64_t pixelCount =
-        uint64_t(mipMaps[0].width) * mipMaps[0].height;
+        static_cast<uint64_t>(mipMaps[0].width) * mipMaps[0].height;
 
-    averageRed = uint32_t(sumRed / pixelCount);
-    averageGreen = uint32_t(sumGreen / pixelCount);
-    averageBlue = uint32_t(sumBlue / pixelCount);
-    averageAlpha = uint32_t(sumAlpha / pixelCount);
+    averageRed = static_cast<uint32_t>(sumRed / pixelCount);
+    averageGreen = static_cast<uint32_t>(sumGreen / pixelCount);
+    averageBlue = static_cast<uint32_t>(sumBlue / pixelCount);
+    averageAlpha = static_cast<uint32_t>(sumAlpha / pixelCount);
 
     // Create tags
     taggs.clear();

@@ -253,7 +253,7 @@ std::vector<PlannedOutput> planOutputs(const std::vector<SourceFile>& sources) {
 
             if (metallic) {
                 output.sources.push_back(metallic->path);
-                output.slots[1] = from(int(output.sources.size()) - 1,
+                output.slots[1] = from(static_cast<int>(output.sources.size()) - 1,
                                        PackChannel::R, metallic->invert);
             } else {
                 output.slots[1] = constant(0);
@@ -262,7 +262,7 @@ std::vector<PlannedOutput> planOutputs(const std::vector<SourceFile>& sources) {
 
             if (roughness) {
                 output.sources.push_back(roughness->path);
-                output.slots[2] = from(int(output.sources.size()) - 1,
+                output.slots[2] = from(static_cast<int>(output.sources.size()) - 1,
                                        PackChannel::R, roughness->invert);
             } else {
                 output.slots[2] = constant(255);

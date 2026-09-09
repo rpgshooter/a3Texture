@@ -9,7 +9,6 @@
 #include "../rvmat_shaders.h"
 #include "../rvmat_parser.h"
 #include "theme.h"
-
 // Set by CMake from git describe; only missing if built outside the project.
 #ifndef A3TEX_VERSION
 #define A3TEX_VERSION "unknown"
@@ -114,7 +113,7 @@ inline std::string resolveModelTexture(const std::string& reference,
                                        const std::string& modelDir,
                                        const std::string& driveRoot) {
     std::string relative = reference;
-    std::replace(relative.begin(), relative.end(), '\\', '/');
+    std::ranges::replace(relative, '\\', '/');
     if (relative.empty() || relative.front() == '#') return {};
 
     const fs::path asPaa = fs::path(relative).replace_extension(".paa");
@@ -156,7 +155,7 @@ struct TexturePreview {
 
     void build(const std::vector<uint8_t>& rgba, uint32_t w, uint32_t h) {
         release();
-        if (rgba.size() < size_t(w) * h * 4) return;
+        if (rgba.size() < static_cast<size_t>(w) * h * 4) return;
 
         a3tex::ImageData full;
         full.width = w;
@@ -167,7 +166,7 @@ struct TexturePreview {
         width = scaled.width;
         height = scaled.height;
 
-        textures[0] = uploadTexture(scaled.data.data(), scaled.width, scaled.height);
+        textures[0] = uploadTexture(scaled.data.data(), static_cast<int>(scaled.width), static_cast<int>(scaled.height));
 
         for (int c = 0; c < 4; c++) {
             std::vector<uint8_t> grey(scaled.data.size());
@@ -178,11 +177,11 @@ struct TexturePreview {
                 grey[i * 4 + 2] = v;
                 grey[i * 4 + 3] = 255;
             }
-            textures[c + 1] = uploadTexture(grey.data(), scaled.width, scaled.height);
+            textures[c + 1] = uploadTexture(grey.data(), static_cast<int>(scaled.width), static_cast<int>(scaled.height));
         }
     }
 
-    bool valid() const { return textures[0] != 0; }
+    [[nodiscard]] bool valid() const { return textures[0] != 0; }
 };
 
 // The shader lists run to 150 entries, so the combo is filtered by typing.
@@ -195,12 +194,12 @@ inline bool shaderCombo(const char* label, std::string& value,
         ImGui::InputTextWithHint("##filter", "type to narrow", filter, filterSize);
 
         std::string needle = filter;
-        std::transform(needle.begin(), needle.end(), needle.begin(), ::tolower);
+        std::ranges::transform(needle, needle.begin(), ::tolower);
 
         for (const auto& option : options) {
             std::string name = option.name;
             std::string lowered = name;
-            std::transform(lowered.begin(), lowered.end(), lowered.begin(), ::tolower);
+            std::ranges::transform(lowered, lowered.begin(), ::tolower);
             if (!needle.empty() && lowered.find(needle) == std::string::npos) continue;
 
             if (ImGui::Selectable(option.name, value == option.name)) {
@@ -276,7 +275,7 @@ public:
         }
     }
 
-    bool dialogBusy() const {
+    [[nodiscard]] bool dialogBusy() const {
         return pendingFiles || pendingFolder || pendingSave;
     }
 
@@ -351,7 +350,7 @@ public:
 
         for (const auto& file : files) {
             std::string ext = fs::path(file).extension().string();
-            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+            std::ranges::transform(ext, ext.begin(), ::tolower);
 
             if (ext == ".paa") {
                 accepted++;
@@ -444,7 +443,7 @@ private:
                                  outputDir, sizeof(outputDir));
         ImGui::SameLine();
         if (ImGui::Button("Output folder...")) {
-            askForFolder("Select output folder", [this](std::string folder) {
+            askForFolder("Select output folder", [this](const std::string& folder) {
                 snprintf(outputDir, sizeof(outputDir), "%s", folder.c_str());
             });
         }
@@ -465,7 +464,7 @@ private:
             const int done = completedJobs.load();
             const int total = totalJobs.load();
             ImGui::SetNextItemWidth(-1);
-            ImGui::ProgressBar(total ? float(done) / total : 0.0f, ImVec2(-1, 24));
+            ImGui::ProgressBar(total ? static_cast<float>(done) / static_cast<float>(total) : 0.0f, ImVec2(-1, 24));
         }
 
         renderResults();
@@ -496,7 +495,7 @@ private:
             int removeIndex = -1;
             for (size_t i = 0; i < inputFiles.size(); i++) {
                 ImGui::TableNextRow();
-                ImGui::PushID(int(i));
+                ImGui::PushID(static_cast<int>(i));
 
                 ImGui::TableNextColumn();
                 ImGui::TextUnformatted(
@@ -508,7 +507,7 @@ private:
                 ImGui::TableNextColumn();
                 int current = 0;
                 for (size_t option = 0; option < options.size(); option++) {
-                    if (options[option].role == inputFiles[i].role) current = int(option);
+                    if (options[option].role == inputFiles[i].role) current = static_cast<int>(option);
                 }
 
                 std::string items;
@@ -548,7 +547,7 @@ private:
                 }
 
                 ImGui::TableNextColumn();
-                if (ImGui::SmallButton("x")) removeIndex = int(i);
+                if (ImGui::SmallButton("x")) removeIndex = static_cast<int>(i);
 
                 ImGui::PopID();
             }
@@ -561,7 +560,8 @@ private:
         renderPlan();
     }
 
-    void renderPlan() {
+    void renderPlan() const
+    {
         const auto outputs = a3tex::planOutputs(inputFiles);
 
         ImGui::Spacing();
@@ -635,7 +635,7 @@ private:
                 ImGui::TextColored(kDim, "%ux%u", job.width, job.height);
 
                 ImGui::TableNextColumn();
-                ImGui::TextColored(kDim, "%lldms", (long long)job.durationMs);
+                ImGui::TextColored(kDim, "%lldms", static_cast<long long>(job.durationMs));
 
                 ImGui::TableNextColumn();
                 if (job.success) {
@@ -654,9 +654,9 @@ private:
 
     // ------------------------------------------------------------------- pack
 
-    const a3tex::PackPreset* currentPreset() const {
+    [[nodiscard]] const a3tex::PackPreset* currentPreset() const {
         const auto names = a3tex::ChannelPacker::presetNames();
-        if (packPreset < 0 || packPreset >= int(names.size())) return nullptr;
+        if (packPreset < 0 || packPreset >= static_cast<int>(names.size())) return nullptr;
         return a3tex::ChannelPacker::findPreset(names[packPreset]);
     }
 
@@ -713,7 +713,7 @@ private:
             ImGui::SameLine();
             if (ImGui::Button("Browse...")) {
                 askForFiles("Select image", {"Images", kImageFilter, "All files", "*"},
-                            false, [this, i](std::vector<std::string> files) {
+                            false, [this, i](const std::vector<std::string>& files) {
                     if (!files.empty()) packSlots[i].path = files[0];
                 });
             }
@@ -748,7 +748,7 @@ private:
                                  sizeof(packOutput));
         ImGui::SameLine();
         if (ImGui::Button("Save as...")) {
-            askForSavePath("Save packed texture", {"PAA", "*.paa"}, [this](std::string file) {
+            askForSavePath("Save packed texture", {"PAA", "*.paa"}, [this](const std::string& file) {
                 snprintf(packOutput, sizeof(packOutput), "%s", file.c_str());
             });
         }
@@ -815,8 +815,8 @@ private:
         ImGui::Spacing();
 
         const float side = std::min(320.0f, ImGui::GetContentRegionAvail().x);
-        const float aspect = previewHeight ? float(previewHeight) / previewWidth : 1.0f;
-        ImGui::Image((ImTextureID)(intptr_t)previewTextures[previewMode],
+        const float aspect = previewHeight ? static_cast<float>(previewHeight) / static_cast<float>(previewWidth) : 1.0f;
+        ImGui::Image(static_cast<ImTextureID>(static_cast<intptr_t>(previewTextures[previewMode])),
                      ImVec2(side, side * aspect));
 
         ImGui::SameLine();
@@ -824,13 +824,13 @@ private:
         ImGui::TextColored(kDim, "%ux%u", packedWidth, packedHeight);
         ImGui::Spacing();
         ImGui::TextColored(kDim, "Stored layout after swizzle:");
-        for (int i = 0; i < 4; i++) {
-            ImGui::TextColored(kDim, "  %s", storedSummary[i].c_str());
+        for (const auto & i : storedSummary) {
+            ImGui::TextColored(kDim, "  %s", i.c_str());
         }
         ImGui::EndGroup();
     }
 
-    void doPack(bool save) {
+    void doPack(const bool save) {
         const a3tex::PackPreset* preset = currentPreset();
         if (!preset) return;
 
@@ -850,10 +850,10 @@ private:
             }
 
             if (overrideSize && overrideWidth > 0 && overrideHeight > 0) {
-                packer.setTargetSize(uint32_t(overrideWidth), uint32_t(overrideHeight));
+                packer.setTargetSize(static_cast<uint32_t>(overrideWidth), static_cast<uint32_t>(overrideHeight));
             }
 
-            a3tex::ImageData packed = packer.pack();
+            const a3tex::ImageData packed = packer.pack();
             packedWidth = packed.width;
             packedHeight = packed.height;
 
@@ -912,7 +912,7 @@ private:
 
     void buildPreview(const std::vector<uint8_t>& rgba, uint32_t width, uint32_t height) {
         clearPreview();
-        if (rgba.size() < size_t(width) * height * 4) return;
+        if (rgba.size() < static_cast<size_t>(width) * height * 4) return;
 
         a3tex::ImageData full;
         full.width = width;
@@ -923,7 +923,7 @@ private:
         previewWidth = scaled.width;
         previewHeight = scaled.height;
 
-        previewTextures[0] = uploadTexture(scaled.data.data(), scaled.width, scaled.height);
+        previewTextures[0] = uploadTexture(scaled.data.data(), static_cast<int>(scaled.width), static_cast<int>(scaled.height));
 
         for (int c = 0; c < 4; c++) {
             std::vector<uint8_t> grey(scaled.data.size());
@@ -934,7 +934,7 @@ private:
                 grey[i * 4 + 2] = v;
                 grey[i * 4 + 3] = 255;
             }
-            previewTextures[c + 1] = uploadTexture(grey.data(), scaled.width, scaled.height);
+            previewTextures[c + 1] = uploadTexture(grey.data(), static_cast<int>(scaled.width), static_cast<int>(scaled.height));
         }
     }
 
@@ -981,7 +981,7 @@ private:
     }
 
     void rebuildViewPreview() {
-        if (viewLevel < 0 || viewLevel >= int(viewMips.size())) return;
+        if (viewLevel < 0 || viewLevel >= static_cast<int>(viewMips.size())) return;
         const auto& mip = viewMips[viewLevel];
         viewPreview.build(mip.data, mip.width, mip.height);
     }
@@ -993,7 +993,7 @@ private:
 
         if (ImGui::Button("Open .paa...")) {
             askForFiles("Open PAA", {"Arma texture", "*.paa", "All files", "*"},
-                        false, [this](std::vector<std::string> files) {
+                        false, [this](const std::vector<std::string>& files) {
                 if (!files.empty()) openPaa(files[0]);
             });
         }
@@ -1016,7 +1016,7 @@ private:
         ImGui::Spacing();
 
         ImGui::SetNextItemWidth(230);
-        if (ImGui::SliderInt("Mip level", &viewLevel, 0, int(viewMips.size()) - 1)) {
+        if (ImGui::SliderInt("Mip level", &viewLevel, 0, static_cast<int>(viewMips.size()) - 1)) {
             rebuildViewPreview();
         }
         ImGui::SameLine(0, 20);
@@ -1035,8 +1035,8 @@ private:
             const float avail = ImGui::GetContentRegionAvail().x;
             const float side = std::min(430.0f, avail - 300.0f);
             const float aspect = viewPreview.width
-                ? float(viewPreview.height) / viewPreview.width : 1.0f;
-            ImGui::Image((ImTextureID)(intptr_t)viewPreview.textures[viewMode],
+                ? static_cast<float>(viewPreview.height) / static_cast<float>(viewPreview.width) : 1.0f;
+            ImGui::Image(static_cast<ImTextureID>(static_cast<intptr_t>(viewPreview.textures[viewMode])),
                          ImVec2(side, side * aspect));
             ImGui::SameLine();
         }
@@ -1084,7 +1084,7 @@ private:
     }
 
     void exportViewPng() {
-        if (viewLevel < 0 || viewLevel >= int(viewMips.size())) return;
+        if (viewLevel < 0 || viewLevel >= static_cast<int>(viewMips.size())) return;
 
         askForSavePath("Export PNG", {"PNG", "*.png"}, [this](std::string file) {
             if (fs::path(file).extension().empty()) file += ".png";
@@ -1125,7 +1125,7 @@ private:
         // Prefer the first LOD that actually has geometry.
         for (size_t i = 0; i < modelInfo.lods.size(); i++) {
             if (!modelInfo.lods[i].faces.empty()) {
-                modelLod = int(i);
+                modelLod = static_cast<int>(i);
                 break;
             }
         }
@@ -1140,7 +1140,7 @@ private:
             }
         }
 
-        if (modelLod < 0 || modelLod >= int(modelInfo.lods.size())) return;
+        if (modelLod < 0 || modelLod >= static_cast<int>(modelInfo.lods.size())) return;
 
         const a3tex::P3DLOD& lod = modelInfo.lods[modelLod];
         if (lod.faces.empty()) {
@@ -1192,9 +1192,9 @@ private:
     // The renderer only takes PAA, so an override in any other format is put
     // through this project's own conversion first. That also shows what the
     // conversion actually produces, on the model.
-    std::string paaForPreview(const std::string& source) {
+    static std::string paaForPreview(const std::string& source) {
         std::string ext = fs::path(source).extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        std::ranges::transform(ext, ext.begin(), ::tolower);
         if (ext == ".paa") return source;
 
         try {
@@ -1234,7 +1234,7 @@ private:
 
         std::vector<std::string> byIndex(textureMap.size());
         for (const auto& [reference, index] : textureMap) {
-            if (index >= 0 && index < int(byIndex.size())) byIndex[index] = reference;
+            if (index >= 0 && index < static_cast<int>(byIndex.size())) byIndex[index] = reference;
         }
         textureRefs = byIndex;
 
@@ -1265,9 +1265,9 @@ private:
         }
 
         for (auto& vertex : mesh.vertices) {
-            const int original = int(vertex.texIndex);
-            vertex.texIndex = (original >= 0 && original < int(remap.size()))
-                ? float(remap[original])
+            const int original = static_cast<int>(vertex.texIndex);
+            vertex.texIndex = (original >= 0 && original < static_cast<int>(remap.size()))
+                ? static_cast<float>(remap[original])
                 : -1.0f;
         }
     }
@@ -1279,7 +1279,7 @@ private:
 
         if (ImGui::Button("Open .p3d...")) {
             askForFiles("Open model", {"Arma model", "*.p3d", "All files", "*"},
-                        false, [this](std::vector<std::string> files) {
+                        false, [this](const std::vector<std::string>& files) {
                 if (!files.empty()) openModel(files[0]);
             });
         }
@@ -1323,7 +1323,7 @@ private:
         }
         ImGui::SameLine();
         if (ImGui::Button("Browse root...")) {
-            askForFolder("Select P drive root", [this](std::string folder) {
+            askForFolder("Select P drive root", [this](const std::string& folder) {
                 snprintf(textureRoot, sizeof(textureRoot), "%s", folder.c_str());
                 uploadModelLod();
             });
@@ -1343,10 +1343,10 @@ private:
                           std::max(240.0f, avail.y - 20.0f));
 
         if (renderer.IsInitialized() && renderer.HasMesh()) {
-            renderer.SetViewportSize(int(size.x), int(size.y));
+            renderer.SetViewportSize(static_cast<int>(size.x), static_cast<int>(size.y));
             renderer.Render();
 
-            ImGui::Image((ImTextureID)(intptr_t)renderer.GetOutputTexture(), size,
+            ImGui::Image(static_cast<ImTextureID>(static_cast<intptr_t>(renderer.GetOutputTexture())), size,
                          ImVec2(0, 1), ImVec2(1, 0));
 
             if (ImGui::IsItemHovered()) {
@@ -1371,11 +1371,11 @@ private:
 
             for (size_t i = 0; i < textureRefs.size(); i++) {
                 if (textureRefs[i].empty()) continue;
-                ImGui::PushID(int(i));
+                ImGui::PushID(static_cast<int>(i));
 
-                const bool overridden = textureOverrides.count(textureRefs[i]) > 0;
-                const bool missing = std::find(missingTextures.begin(), missingTextures.end(),
-                                               textureRefs[i]) != missingTextures.end();
+                const bool overridden = textureOverrides.contains(textureRefs[i]);
+                const bool missing = std::ranges::find(missingTextures,
+                                                       textureRefs[i]) != missingTextures.end();
 
                 ImGui::TextColored(missing ? kBad : (overridden ? kAccent : kDim), "%s",
                     fs::path(textureRefs[i]).filename().string().c_str());
@@ -1391,7 +1391,7 @@ private:
                     askForFiles("Use this texture instead",
                                 {"Textures", "*.paa *.png *.tga *.tif *.tiff *.jpg",
                                  "All files", "*"},
-                                false, [this, reference](std::vector<std::string> files) {
+                                false, [this, reference](const std::vector<std::string>& files) {
                         if (files.empty()) return;
                         textureOverrides[reference] = files[0];
                         uploadModelLod();
@@ -1432,7 +1432,7 @@ private:
 
     void applyMaterialTemplate() {
         const auto names = a3tex::rvmatTemplates();
-        if (materialTemplate < 0 || materialTemplate >= int(names.size())) return;
+        if (materialTemplate < 0 || materialTemplate >= static_cast<int>(names.size())) return;
 
         const a3tex::RvmatMaterial preset = a3tex::rvmatTemplate(names[materialTemplate]);
         material.ambient = preset.ambient;
@@ -1464,7 +1464,7 @@ private:
         if (ImGui::Button("From a texture set...")) {
             askForFiles("Pick any texture from the set",
                         {"Textures", "*.paa *.png *.tga *.tif *.tiff", "All files", "*"},
-                        false, [this](std::vector<std::string> files) {
+                        false, [this](const std::vector<std::string>& files) {
                 if (files.empty()) return;
                 materialSource = files[0];
                 materialPath.clear();
@@ -1476,7 +1476,7 @@ private:
         ImGui::SameLine();
         if (ImGui::Button("Open .rvmat...")) {
             askForFiles("Open material", {"RVMAT", "*.rvmat", "All files", "*"},
-                        false, [this](std::vector<std::string> files) {
+                        false, [this](const std::vector<std::string>& files) {
                 if (!files.empty()) openRvmat(files[0]);
             });
         }
@@ -1531,7 +1531,7 @@ private:
         itemWidth(300);
         if (ImGui::Combo("Material type", &materialTemplate, items.c_str())) {
             const auto& types = a3tex::materialTypes();
-            if (materialTemplate >= 0 && materialTemplate < int(types.size())) {
+            if (materialTemplate >= 0 && materialTemplate < static_cast<int>(types.size())) {
                 material.vertexShaderID = types[materialTemplate].vertexShader;
                 material.pixelShaderID = types[materialTemplate].pixelShader;
             }
@@ -1590,7 +1590,7 @@ private:
                 const int slot = index;
                 askForFiles("Pick a texture for this stage",
                             {"Textures", "*.paa", "All files", "*"}, false,
-                            [this, slot](std::vector<std::string> files) {
+                            [this, slot](const std::vector<std::string>& files) {
                     if (files.empty()) return;
                     material.stages[slot].texture =
                         a3tex::enginePath(files[0], textureRoot);
@@ -1680,15 +1680,15 @@ private:
             // Tables resize columns but not rows, so this divider is hand rolled.
             // Both sides keep a floor, and the model yields first when the pane
             // is too short to honour them.
-            const float grip = 6.0f;
+            constexpr float grip = 6.0f;
             const float room = ImGui::GetContentRegionAvail().y - grip;
             const float height = std::clamp(materialPreviewHeight, kMinPreview,
                                             std::max(kMinPreview, room - kMinRvmatText));
 
-            renderer.SetViewportSize(int(width), int(height));
+            renderer.SetViewportSize(static_cast<int>(width), static_cast<int>(height));
             renderer.Render();
 
-            ImGui::Image((ImTextureID)(intptr_t)renderer.GetOutputTexture(),
+            ImGui::Image(static_cast<ImTextureID>(static_cast<intptr_t>(renderer.GetOutputTexture())),
                          ImVec2(width, height), ImVec2(0, 1), ImVec2(1, 0));
 
             if (ImGui::IsItemHovered()) {
@@ -1778,7 +1778,7 @@ private:
 
     // Colours are cheap enough to push every frame; textures are only touched
     // when the stage actually points somewhere new.
-    a3tex::MaterialPropertiesModel asRendererMaterial() const {
+    [[nodiscard]] a3tex::MaterialPropertiesModel asRendererMaterial() const {
         a3tex::MaterialPropertiesModel properties;
         for (int c = 0; c < 4; c++) {
             properties.ambient[c] = material.ambient[c];
@@ -1798,7 +1798,7 @@ private:
         appliedSections = 0;
         for (size_t i = 0; i < slots.size(); i++) {
             // -1 means every section; otherwise only the chosen one changes.
-            if (materialSlot >= 0 && int(i) != materialSlot) continue;
+            if (materialSlot >= 0 && static_cast<int>(i) != materialSlot) continue;
             slots[i].material = properties;
             appliedSections++;
         }
@@ -1849,7 +1849,7 @@ private:
 
     void addFiles() {
         askForFiles("Select images", {"Images", kImageFilter, "All files", "*"},
-                    true, [this](std::vector<std::string> files) {
+                    true, [this](const std::vector<std::string>& files) {
             for (const auto& file : files) {
                 inputFiles.push_back(a3tex::describeSource(file));
             }
@@ -1874,7 +1874,7 @@ private:
         successCount = 0;
         failCount = 0;
         completedJobs = 0;
-        totalJobs = int(outputs.size());
+        totalJobs = static_cast<int>(outputs.size());
         converting = true;
 
         const int formatChoice = selectedFormat;
@@ -1884,7 +1884,7 @@ private:
         std::thread([this, outputs, formatChoice, qualityChoice, dir] {
             std::atomic<size_t> next{0};
             unsigned workers = std::max(1u, std::thread::hardware_concurrency());
-            workers = std::min<unsigned>(workers, unsigned(outputs.size()));
+            workers = std::min<unsigned>(workers, static_cast<unsigned>(outputs.size()));
 
             auto worker = [&] {
                 for (size_t index = next++; index < outputs.size(); index = next++) {
@@ -1946,8 +1946,8 @@ private:
                         job.durationMs = ms;
                     }
 
-                    if (ok) successCount++; else failCount++;
-                    completedJobs++;
+                    if (ok) ++successCount; else ++failCount;
+                    ++completedJobs;
                 }
             };
 
@@ -2045,14 +2045,14 @@ private:
     std::string storedSummary[4];
 };
 
-static void glfw_error_callback(int error, const char* description) {
+static void glfw_error_callback(const int error, const char* description) {
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
 
-static void glfw_drop_callback(GLFWwindow* window, int count, const char** paths) {
+static void glfw_drop_callback(GLFWwindow* window, const int count, const char** paths) {
     auto* app = static_cast<PAAConverterApp*>(glfwGetWindowUserPointer(window));
     std::vector<std::string> files;
-    for (int i = 0; i < count; i++) files.push_back(paths[i]);
+    for (int i = 0; i < count; i++) files.emplace_back(paths[i]);
     app->handleFileDrop(files);
 }
 
@@ -2060,7 +2060,7 @@ int main(int, char**) {
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit()) return 1;
 
-    const char* glsl_version = "#version 330";
+    constexpr auto glsl_version = "#version 330";
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -2075,7 +2075,7 @@ int main(int, char**) {
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
 
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) return 1;
+    if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) return 1;
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();

@@ -669,10 +669,10 @@ void ModelRenderer::BuildGrid() {
 				 static_cast<GLsizeiptr>(verts.size() * sizeof(GridVertex)),
 				 verts.data(), GL_STATIC_DRAW);
 	// Position
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(GridVertex), (void*)0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(GridVertex), nullptr);
 	glEnableVertexAttribArray(0);
 	// Color
-	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(GridVertex), (void*)(3 * sizeof(float)));
+	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(GridVertex), reinterpret_cast<void*>(3 * sizeof(float)));
 	glEnableVertexAttribArray(1);
 	glBindVertexArray(0);
 }
@@ -833,23 +833,23 @@ void ModelRenderer::LoadMesh(const RendererMesh& mesh) {
 
 	// Position attribute (location 0)
 	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(RendererVertex), (void*)0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(RendererVertex), nullptr);
 
 	// Normal attribute (location 1)
 	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(RendererVertex), (void*)(3 * sizeof(float)));
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(RendererVertex), reinterpret_cast<void*>(3 * sizeof(float)));
 
 	// UV attribute (location 2)
 	glEnableVertexAttribArray(2);
-	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(RendererVertex), (void*)(6 * sizeof(float)));
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(RendererVertex), reinterpret_cast<void*>(6 * sizeof(float)));
 
 	// Highlight attribute (location 3)
 	glEnableVertexAttribArray(3);
-	glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(RendererVertex), (void*)(8 * sizeof(float)));
+	glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(RendererVertex), reinterpret_cast<void*>(8 * sizeof(float)));
 
 	// Texture index attribute (location 4)
 	glEnableVertexAttribArray(4);
-	glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(RendererVertex), (void*)(9 * sizeof(float)));
+	glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(RendererVertex), reinterpret_cast<void*>(9 * sizeof(float)));
 
 	glBindVertexArray(0);
 
@@ -1218,13 +1218,13 @@ void ModelRenderer::LoadTestCube() {
 	glBufferData(GL_ARRAY_BUFFER, sizeof(cubeData), cubeData, GL_STATIC_DRAW);
 
 	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), nullptr);
 	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(3 * sizeof(float)));
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
 	glEnableVertexAttribArray(2);
-	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(6 * sizeof(float)));
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float), reinterpret_cast<void*>(6 * sizeof(float)));
 	glEnableVertexAttribArray(3);
-	glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(8 * sizeof(float)));
+	glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 9 * sizeof(float), reinterpret_cast<void*>(8 * sizeof(float)));
 
 	glBindVertexArray(0);
 
@@ -1364,7 +1364,7 @@ void ModelRenderer::Render() {
 	for (size_t i = 0; i < m_TextureSlots.size() && i < MAX_TEXTURE_SLOTS; i++) {
 		const auto& slot = m_TextureSlots[i];
 		if (slot.active && slot.textureId != 0) {
-			glActiveTexture(GL_TEXTURE0 + (GLenum)i);
+			glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(i));
 			glBindTexture(GL_TEXTURE_2D, slot.textureId);
 			if (m_LocTextures[i] >= 0) {
 				glUniform1i(m_LocTextures[i], static_cast<int>(i));

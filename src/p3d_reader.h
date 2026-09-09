@@ -92,7 +92,7 @@ inline std::string GetLODTypeName(float resolution) {
 	if (resolution < 1000.0f) {
 		if (resolution < 1.0f)
 			return "Visual";
-		int lodNum = (int)resolution;
+		int lodNum = static_cast<int>(resolution);
 		char buf[32];
 		snprintf(buf, 32, "Visual %d", lodNum);
 		return buf;
@@ -242,7 +242,7 @@ inline void ExtractPathsFromData(const std::vector<uint8_t>& data, std::vector<s
 inline size_t ReadAsciizFromBuffer(const uint8_t* data, size_t offset, size_t maxSize, std::string& out) {
 	out.clear();
 	while (offset < maxSize && data[offset] != 0) {
-		out += (char)data[offset];
+		out += static_cast<char>(data[offset]);
 		offset++;
 	}
 	return offset + 1;	// Skip null terminator

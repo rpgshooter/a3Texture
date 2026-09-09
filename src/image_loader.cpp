@@ -141,7 +141,7 @@ ImageData ImageLoader::loadTIFF(const std::string& filename) {
     ImageData img;
     img.width = width;
     img.height = height;
-    img.data.assign(size_t(width) * height * 4, 255);
+    img.data.assign(static_cast<size_t>(width) * height * 4, 255);
 
     for (uint32_t row = 0; row < height; row++) {
         if (TIFFReadScanline(tif, scanline.data(), row) < 0) {
@@ -150,12 +150,12 @@ ImageData ImageLoader::loadTIFF(const std::string& filename) {
         }
 
         const uint32_t dstRow = (orientation == ORIENTATION_BOTLEFT) ? height - 1 - row : row;
-        uint8_t* dst = img.data.data() + size_t(dstRow) * width * 4;
+        uint8_t* dst = img.data.data() + static_cast<size_t>(dstRow) * width * 4;
 
         for (uint32_t x = 0; x < width; x++) {
             uint8_t value[4] = {0, 0, 0, 255};
             for (uint16_t sample = 0; sample < sampleCount; sample++) {
-                const size_t index = size_t(x) * samples + sample;
+                const size_t index = static_cast<size_t>(x) * samples + sample;
                 value[sample] = (bits == 8)
                     ? scanline[index]
                     : static_cast<uint8_t>(
@@ -180,7 +180,7 @@ ImageData ImageLoader::loadTIFF(const std::string& filename) {
                 }
             }
 
-            std::copy(rgba, rgba + 4, dst + size_t(x) * 4);
+            std::copy(rgba, rgba + 4, dst + static_cast<size_t>(x) * 4);
         }
     }
 

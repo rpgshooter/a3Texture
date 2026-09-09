@@ -322,8 +322,8 @@ P3DInfo ReadP3DInfo(const char* path) {
 		info.type = "MLOD";
 		info.valid = true;
 
-		file.read((char*)&info.version, 4);
-		file.read((char*)&info.lodCount, 4);
+		file.read(reinterpret_cast<char*>(&info.version), 4);
+		file.read(reinterpret_cast<char*>(&info.lodCount), 4);
 
 		info.boundingBox[0] = info.boundingBox[1] = info.boundingBox[2] = 1e9f;
 		info.boundingBox[3] = info.boundingBox[4] = info.boundingBox[5] = -1e9f;
@@ -337,24 +337,24 @@ P3DInfo ReadP3DInfo(const char* path) {
 
 			bool isP3DM = (lod.signature == "P3DM");
 
-			file.read((char*)&lod.majorVersion, 4);
-			file.read((char*)&lod.minorVersion, 4);
+			file.read(reinterpret_cast<char*>(&lod.majorVersion), 4);
+			file.read(reinterpret_cast<char*>(&lod.minorVersion), 4);
 
 			uint32_t numPoints, numNormals, numFaces, flags;
-			file.read((char*)&numPoints, 4);
-			file.read((char*)&numNormals, 4);
-			file.read((char*)&numFaces, 4);
-			file.read((char*)&flags, 4);
+			file.read(reinterpret_cast<char*>(&numPoints), 4);
+			file.read(reinterpret_cast<char*>(&numNormals), 4);
+			file.read(reinterpret_cast<char*>(&numFaces), 4);
+			file.read(reinterpret_cast<char*>(&flags), 4);
 
 			info.totalVertices += numPoints;
 			info.totalFaces += numFaces;
 
 			lod.points.resize(numPoints);
 			for (uint32_t i = 0; i < numPoints; i++) {
-				file.read((char*)&lod.points[i].x, 4);
-				file.read((char*)&lod.points[i].y, 4);
-				file.read((char*)&lod.points[i].z, 4);
-				file.read((char*)&lod.points[i].flags, 4);
+				file.read(reinterpret_cast<char*>(&lod.points[i].x), 4);
+				file.read(reinterpret_cast<char*>(&lod.points[i].y), 4);
+				file.read(reinterpret_cast<char*>(&lod.points[i].z), 4);
+				file.read(reinterpret_cast<char*>(&lod.points[i].flags), 4);
 
 				info.boundingBox[0] = std::min(info.boundingBox[0], lod.points[i].x);
 				info.boundingBox[1] = std::min(info.boundingBox[1], lod.points[i].y);
@@ -365,7 +365,7 @@ P3DInfo ReadP3DInfo(const char* path) {
 			}
 
 			lod.normals.resize(numNormals * 3);
-			file.read((char*)lod.normals.data(), numNormals * 12);
+			file.read(reinterpret_cast<char*>(lod.normals.data()), numNormals * 12);
 
 			lod.faces.resize(numFaces);
 			for (uint32_t i = 0; i < numFaces; i++) {
@@ -377,16 +377,16 @@ P3DInfo ReadP3DInfo(const char* path) {
 					face.texture = texName;
 				}
 
-				file.read((char*)&face.type, 4);
+				file.read(reinterpret_cast<char*>(&face.type), 4);
 
 				for (int v = 0; v < 4; v++) {
-					file.read((char*)&face.verts[v].pointIndex, 4);
-					file.read((char*)&face.verts[v].normalIndex, 4);
-					file.read((char*)&face.verts[v].u, 4);
-					file.read((char*)&face.verts[v].v, 4);
+					file.read(reinterpret_cast<char*>(&face.verts[v].pointIndex), 4);
+					file.read(reinterpret_cast<char*>(&face.verts[v].normalIndex), 4);
+					file.read(reinterpret_cast<char*>(&face.verts[v].u), 4);
+					file.read(reinterpret_cast<char*>(&face.verts[v].v), 4);
 				}
 
-				file.read((char*)&face.flags, 4);
+				file.read(reinterpret_cast<char*>(&face.flags), 4);
 
 				if (isP3DM) {
 					face.texture = ReadAsciiz(file);
@@ -410,7 +410,7 @@ P3DInfo ReadP3DInfo(const char* path) {
 
 					if (isP3DM) {
 						uint8_t active;
-						file.read((char*)&active, 1);
+						file.read(reinterpret_cast<char*>(&active), 1);
 						tagName = ReadAsciiz(file);
 					} else {
 						char name[64];
@@ -419,7 +419,7 @@ P3DInfo ReadP3DInfo(const char* path) {
 					}
 
 					uint32_t dataSize;
-					file.read((char*)&dataSize, 4);
+					file.read(reinterpret_cast<char*>(&dataSize), 4);
 
 					if (tagName == "#EndOfFile#") {
 						endOfTags = true;
@@ -463,8 +463,8 @@ P3DInfo ReadP3DInfo(const char* path) {
 						if (dataSize == numPoints + numFaces) {
 							sel.pointWeights.resize(numPoints);
 							sel.faceWeights.resize(numFaces);
-							file.read((char*)sel.pointWeights.data(), numPoints);
-							file.read((char*)sel.faceWeights.data(), numFaces);
+							file.read(reinterpret_cast<char*>(sel.pointWeights.data()), numPoints);
+							file.read(reinterpret_cast<char*>(sel.faceWeights.data()), numFaces);
 						} else {
 							file.seekg(dataSize, std::ios::cur);
 						}
@@ -482,19 +482,19 @@ P3DInfo ReadP3DInfo(const char* path) {
 				}
 			}
 
-			file.read((char*)&lod.resolution, 4);
+			file.read(reinterpret_cast<char*>(&lod.resolution), 4);
 			info.lods.push_back(lod);
 		}
 
 	} else if (strncmp(sig, "ODOL", 4) == 0) {
 		info.type = "ODOL";
 		info.valid = true;
-		file.read((char*)&info.version, 4);
+		file.read(reinterpret_cast<char*>(&info.version), 4);
 
 		// Skip appID for newer versions
 		if (info.version >= 58) {
 			uint32_t appID;
-			file.read((char*)&appID, 4);
+			file.read(reinterpret_cast<char*>(&appID), 4);
 		}
 
 		// Search for lodCount by finding where the LOD resolutions start
@@ -505,7 +505,7 @@ P3DInfo ReadP3DInfo(const char* path) {
 		for (int scanOffset = 8; scanOffset <= 64 && info.lodCount == 0; scanOffset++) {
 			file.seekg(scanOffset, std::ios::beg);
 			uint32_t potential;
-			file.read((char*)&potential, 4);
+			file.read(reinterpret_cast<char*>(&potential), 4);
 
 			if (potential >= 1 && potential <= 50) {
 				// Check if followed by valid LOD resolutions
@@ -513,7 +513,7 @@ P3DInfo ReadP3DInfo(const char* path) {
 				std::vector<float> testRes(std::min(potential, 5u));
 
 				for (uint32_t i = 0; i < testRes.size() && allValid; i++) {
-					file.read((char*)&testRes[i], 4);
+					file.read(reinterpret_cast<char*>(&testRes[i]), 4);
 					if (testRes[i] < 0.0f || (testRes[i] > 20000.0f && testRes[i] < 1e10f) || testRes[i] > 1e16f) {
 						allValid = false;
 					}
@@ -547,7 +547,7 @@ P3DInfo ReadP3DInfo(const char* path) {
 		// Read LOD resolutions
 		std::vector<float> lodResolutions(info.lodCount);
 		for (uint32_t i = 0; i < info.lodCount; i++) {
-			file.read((char*)&lodResolutions[i], 4);
+			file.read(reinterpret_cast<char*>(&lodResolutions[i]), 4);
 		}
 
 		// Initialize bounding box
@@ -559,7 +559,7 @@ P3DInfo ReadP3DInfo(const char* path) {
 			size_t infoStart = file.tellg();
 
 			std::vector<uint8_t> modelInfoChunk(65536);
-			file.read((char*)modelInfoChunk.data(), modelInfoChunk.size());
+			file.read(reinterpret_cast<char*>(modelInfoChunk.data()), modelInfoChunk.size());
 			size_t bytesRead = file.gcount();
 			modelInfoChunk.resize(bytesRead);
 
