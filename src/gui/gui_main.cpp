@@ -9,6 +9,7 @@
 #include "../rvmat_shaders.h"
 #include "../rvmat_parser.h"
 #include "theme.h"
+#include "gui_main.h"
 // Set by CMake from git describe; only missing if built outside the project.
 #ifndef A3TEX_VERSION
 #define A3TEX_VERSION "unknown"
@@ -2056,7 +2057,7 @@ static void glfw_drop_callback(GLFWwindow* window, const int count, const char**
     app->handleFileDrop(files);
 }
 
-int main(int, char**) {
+int RunGui() {
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit()) return 1;
 

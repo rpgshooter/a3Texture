@@ -20,6 +20,8 @@
 #include <mutex>
 #include <map>
 
+#include "gui/gui_main.h"
+
 namespace fs = std::filesystem;
 //TODO: main.cpp, line 24, should probably rework this stupid std::cout spam
 // Set by CMake from git describe; only missing if built outside the project.
@@ -700,9 +702,10 @@ std::string getOutputFilename(const std::string& input, const std::string& outpu
 }
 
 int main(int argc, char** argv) {
+    // No arguments means this was launched as a desktop app rather than from
+    // a shell, so hand off to the GUI instead of printing usage.
     if (argc < 2) {
-        printUsage(argv[0]);
-        return 1;
+        return RunGui();
     }
 
     // Asked for by itself this is a question, not a failure, so it reports
@@ -778,6 +781,7 @@ int main(int argc, char** argv) {
         bool batchMode = false;
 
         // Parse arguments
+        // this should be done better instead of a large if-else chain
         for (int i = 1; i < argc; i++) {
             std::string arg = argv[i];
 

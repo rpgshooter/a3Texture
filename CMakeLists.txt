@@ -55,6 +55,13 @@ set(SOURCES
     src/job_runner.cpp
     src/p3d_reader.cpp
     src/rvmat_writer.cpp
+    # The CLI drops into the GUI when started without arguments, so it needs
+    # the same sources the standalone GUI builds from.
+    src/gui/gui_main.cpp
+    src/viewer_3d.cpp
+    src/model_renderer.cpp
+    src/paa_texture.cpp
+    src/rvmat_parser.cpp
 )
 
 set(HEADERS
@@ -72,6 +79,7 @@ set(HEADERS
         src/rvmat_parser.h
         src/binary_reader.h
         src/utils.h
+        src/gui/gui_main.h
 )
 
 #=============================================================================
@@ -86,14 +94,22 @@ target_link_libraries(a3texture-cli PRIVATE
     TIFF::TIFF
     nlohmann_json::nlohmann_json
     ${LZO_LIBRARY}
+    imgui::imgui
+    glfw
+    glad::glad
 )
 
-target_include_directories(a3texture-cli PRIVATE ${Stb_INCLUDE_DIR} ${LZO_INCLUDE_DIR})
+target_include_directories(a3texture-cli PRIVATE
+    ${Stb_INCLUDE_DIR}
+    ${PORTABLE_FILE_DIALOGS_INCLUDE_DIRS}
+    ${LZO_INCLUDE_DIR}
+)
 
 #=============================================================================
 # GUI Application
 #=============================================================================
 set(GUI_SOURCES
+        src/gui/gui_entry.cpp
         src/gui/gui_main.cpp
     src/paa.cpp
     src/image_loader.cpp
@@ -107,6 +123,7 @@ set(GUI_SOURCES
     src/paa_texture.cpp
     src/rvmat_parser.cpp
         src/gui/theme.h
+        src/gui/gui_main.h
 )
 
 add_executable(a3texture-gui ${GUI_SOURCES})
