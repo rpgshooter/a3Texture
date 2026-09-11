@@ -5,14 +5,22 @@ And more
 
 ## Features
 
-- **Native C++ Performance** - Uses libsquish for DXT1/DXT5 compression
-- **CLI Tool** - Batch conversion from command line
-- **GUI Application** - Dear ImGui interface with drag & drop support
-- **Format Support** - PNG, TGA, JPG, TIFF input formats
-- **Channel Packing** - Builds _nohq/_smdi/_as/_dt from source maps, no Substance packing needed
-- **Auto Mipmap Generation** - Generates all mipmap levels automatically
-- **DXT Compression** - DXT1 (no alpha) and DXT5 (with alpha)
-- **LZO Compression** - Automatic LZO compression for large mipmaps (>128px)
+- **Convert textures** — PNG, TGA, TIFF, JPEG and BMP to PAA, and back
+  to PNG for editing. Batch converts a folder across all your cores.
+- **Packs channels for you** — drop in Substance exports under their
+  default names and the correct `_nohq`, `_smdi`, `_as` and `_dt` maps
+  come out. Roughness is inverted to gloss automatically. Already-packed
+  Arma textures pass through untouched.
+- **Writes the rvmat** — generates a complete material wired to whichever
+  maps you have, with engine-correct P drive paths and retail placeholders
+  for anything missing.
+- **Whole sets at once** — hand it every map for a model and get the
+  finished PAA set plus material in one pass. `plan` shows you what it
+  would do first.
+- **Inspect models** — open `.p3d` files to check LODs and materials, and
+  preview your textures on the model in 3D.
+- **GUI or CLI** — drag and drop, or script it into a build pipeline.
+
 
 ## Download
 
